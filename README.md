@@ -121,5 +121,10 @@ On a section page, open the **Attendance** tab.
 
 ## Export grading sheet
 
-- **Faculty dashboard → Export grading sheet** downloads one Excel file: a Summary sheet plus one sheet per section (header block, CP / EA by period, MPT, CPT, attendance, bonus, Midterm and Final % and equivalents, remarks).
-- From the command line (writes into a folder, never overwrites): `npm run export-grades -- <faculty email> "<folder>"`. Set `MONGODB_URI` to the Atlas string to export the online data.
+The export uses the NU class record (CLREC) format: `server/templates/class-record-template.xlsx` is the blank CLREC workbook, filled the way a faculty would by hand.
+
+- **Cover Page**: faculty, term and A.Y., and the section list (rows 19–28, up to 10 sections).
+- **References**: the class list (ID, name, course, section) that the section sheets FILTER from.
+- **One sheet per section**, copied from TEMPLATE: section code in U6, item names / max scores in rows 11–12 (CP Midterms J–P, CP Post Q–W, EA Midterms X–AD, EA Post AE–AK, MPT AL, CPT AM), scores and bonus from row 13, the section's percentage allocation in AG4:AJ5, and its own sheet-scoped names (CP_Midterms, EA_Total, …). The workbook's formulas compute the grades; a component with no items counts as 0 (IFERROR) instead of #DIV/0!.
+- Attendance (when graded) fills one column of its CP or EA group. A group with more items than columns combines the extra items into its last column, so the grade stays exact.
+- **Faculty dashboard → Export grading sheet** downloads it; from the command line (writes into a folder, never overwrites): `npm run export-grades -- <faculty email> "<folder>"` (add `--template <file>` to use another blank CLREC). Set `MONGODB_URI` to the Atlas string to export the online data.

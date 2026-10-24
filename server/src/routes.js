@@ -7,7 +7,7 @@ import { COMPONENTS, MARKS, attendanceItems, computeGrades } from './grading.js'
 import { saveCredentials } from './credentials.js';
 import { cleanSchedule, legacyFields } from './schedule.js';
 import { mailConfigured, sendStudentCredentials } from './mailer.js';
-import { buildGradingWorkbook, gradingFileName } from './exportWorkbook.js';
+import { buildClassRecord, gradingFileName } from './classRecordExport.js';
 import admin from './admin.js';
 import {
   clearSession,
@@ -475,16 +475,15 @@ faculty.delete(
   })
 );
 
-// Excel grading sheet: Summary + one sheet per section.
+// Grading sheet in the NU class record format: one sheet per section, filled into the CLREC template.
 faculty.get(
   '/export',
   wrap(async (req, res) => {
-    const { wb, sections } = await buildGradingWorkbook(req.user);
+    const { buffer, sections } = await buildClassRecord(req.user);
     const name = gradingFileName(req.user, sections);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`);
-    await wb.xlsx.write(res);
-    res.end();
+    res.send(buffer);
   })
 );
 

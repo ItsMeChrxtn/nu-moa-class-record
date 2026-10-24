@@ -6,3 +6,4 @@ server/credentials/
 
 *.log
 .vercel
+!server/templates/*.xlsx
