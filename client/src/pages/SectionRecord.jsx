@@ -591,6 +591,11 @@ const DEFAULT_SCALE_ROWS = [
   { from: 60, eq: '1.0' },
 ];
 const MAX_SCALE_ROWS = 7; // the class record's equivalence table has 7 rows plus R
+// Spreads the grades evenly from the passing percentage up to 100 (passing 60 gives the NU default).
+function spreadFrom(passing, rows) {
+  const step = (101 - passing) / rows.length;
+  return rows.map((r, i) => ({ ...r, from: Math.ceil(passing + (rows.length - 1 - i) * step - 1e-9) }));
+}
 const sameScale = (a, b) => a.length === b.length && a.every((r, i) => Number(r.from) === b[i].from && r.eq.trim() === b[i].eq);
 
 function Weights({ weights, scale, onSave, onClose }) {
@@ -602,6 +607,15 @@ function Weights({ weights, scale, onSave, onClose }) {
   const set = (period, k) => (e) => setW({ ...w, [period]: { ...w[period], [k]: e.target.value } });
   const total = (p) => Object.values(w[p]).reduce((s, v) => s + (Number(v) || 0), 0);
   const setRow = (i, k, v) => setRows(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  const [passing, setPassing] = useState(() => String(rows.at(-1)?.from ?? 60));
+  const passingNum = Number(passing);
+  const passingError =
+    !Number.isInteger(passingNum) || passingNum < 1 || passingNum > 100
+      ? 'Passing grade must be a whole number from 1 to 100.'
+      : 101 - passingNum < rows.length
+        ? `${passingNum} leaves too little room for ${rows.length} grades. Use ${101 - rows.length} or lower, or remove a grade.`
+        : '';
+  const applyPassing = () => !passingError && setRows(spreadFrom(passingNum, rows));
 
   // Ranges must go down: each row starts below the one above it.
   const scaleError = (() => {
@@ -678,9 +692,37 @@ function Weights({ weights, scale, onSave, onClose }) {
         <div className="weight-block scale-block">
           <div className="weight-block-head">
             <strong>Grade Point Equivalence</strong>
-            <button type="button" className="link-btn reset-link" onClick={() => setRows(DEFAULT_SCALE_ROWS.map((r) => ({ ...r })))} disabled={sameScale(rows, DEFAULT_SCALE_ROWS)}>
+            <button
+              type="button"
+              className="link-btn reset-link"
+              onClick={() => {
+                setRows(DEFAULT_SCALE_ROWS.map((r) => ({ ...r })));
+                setPassing('60');
+              }}
+              disabled={sameScale(rows, DEFAULT_SCALE_ROWS)}
+            >
               Reset to NU default
             </button>
+          </div>
+          <div className="passing-row">
+            <label htmlFor="passing-grade">Passing grade</label>
+            <div className="pct">
+              <input
+                id="passing-grade"
+                type="number"
+                min="1"
+                max="100"
+                value={passing}
+                onChange={(e) => setPassing(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), applyPassing())}
+              />
+            </div>
+            <button type="button" className="btn small" onClick={applyPassing} disabled={!!passingError}>
+              Spread grades
+            </button>
+            <span className={`passing-hint ${passingError ? 'bad' : ''}`}>
+              {passingError || `Lowest passing grade starts at ${passingNum}%; the rest are spaced evenly up to 100. You can still edit each row.`}
+            </span>
           </div>
           <div className="scale-head" aria-hidden="true">
             <span>Range (%)</span>
