@@ -147,16 +147,22 @@ export async function deleteSection(section, { confirm, toast }, counts = {}) {
 
 const blank = { code: '', subjectCode: '', subjectTitle: '', units: '3', term: '', academicYear: '', copyFrom: '' };
 
-export function NewSectionModal({ sections, onClose, onCreated }) {
+// preset: { academicYear, term } when opened from an academic-year group; those stay fixed
+// (a PDF won't overwrite them), so the new section lands in that group.
+export function NewSectionModal({ sections, onClose, onCreated, preset }) {
   const latest = sections[0];
-  const [form, setForm] = useState({ ...blank, term: latest?.term || '', academicYear: latest?.academicYear || '' });
+  const [form, setForm] = useState({
+    ...blank,
+    term: preset ? preset.term : latest?.term || '',
+    academicYear: preset ? preset.academicYear : latest?.academicYear || '',
+  });
   const [rows, setRows] = useState([blankRow()]);
   const [rowsTouched, setRowsTouched] = useState(false);
   const [students, setStudents] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  // Fields the faculty typed in are never overwritten by PDF details.
-  const [touched, setTouched] = useState(() => new Set());
+  // Fields the faculty typed in (or the group's preset) are never overwritten by PDF details.
+  const [touched, setTouched] = useState(() => new Set(preset ? ['term', 'academicYear'] : []));
   const [filled, setFilled] = useState(null); // { file, keys }
   const set = (k) => (e) => {
     setForm({ ...form, [k]: e.target.value });
@@ -209,7 +215,11 @@ export function NewSectionModal({ sections, onClose, onCreated }) {
   return (
     <Modal
       title="New Section"
-      subtitle="Upload the master list (PDF). The section details and students are filled in for you to review."
+      subtitle={
+        preset
+          ? `For Academic Year ${preset.academicYear.replace(/\s*-\s*/, ' - ') || '(none)'} · ${preset.term || '(no term)'}. Upload the master list (PDF); the other details and students are filled in for you to review.`
+          : 'Upload the master list (PDF). The section details and students are filled in for you to review.'
+      }
       icon="layers"
       onClose={onClose}
       width={980}

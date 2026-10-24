@@ -164,7 +164,7 @@ export default function FacultyHome() {
           </EmptyState>
         ) : (
           // One group per academic year + term; each exports its own Excel file so terms are never mixed.
-          groups.map((g, i) => (
+          groups.map((g) => (
             <section key={g.key} className="term-group">
               <div className="section-title-row">
                 <h2>
@@ -181,13 +181,12 @@ export default function FacultyHome() {
               </div>
               <div className="grid">
                 {g.sections.map(card)}
-                {i === 0 && (
-                  <button className="section-card add-card" onClick={() => setCreating(true)}>
-                    <span className="add-icon"><Icon name="plus" size={20} /></span>
-                    <strong>New Section</strong>
-                    <span>Import the class list from a PDF</span>
-                  </button>
-                )}
+                {/* Adds a section to this academic year + term. */}
+                <button className="section-card add-card" onClick={() => setCreating({ academicYear: g.academicYear, term: g.term })}>
+                  <span className="add-icon"><Icon name="plus" size={20} /></span>
+                  <strong>New Section</strong>
+                  <span>{g.term || 'No term'} · A.Y. {g.academicYear.replace(/\s*-\s*/, ' - ') || '—'}</span>
+                </button>
               </div>
             </section>
           ))
@@ -197,6 +196,7 @@ export default function FacultyHome() {
       {creating && (
         <NewSectionModal
           sections={sections}
+          preset={typeof creating === 'object' ? creating : undefined}
           onClose={() => setCreating(false)}
           onCreated={(section, result) => navigate(`/faculty/sections/${section.id}`, { state: { result } })}
         />
