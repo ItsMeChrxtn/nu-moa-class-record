@@ -1,0 +1,6 @@
+# Only the website (client/) is deployed to Vercel; keep the server and local files out of the upload.
+server
+**/.env
+**/credentials
+*.xlsx
+*.csv
