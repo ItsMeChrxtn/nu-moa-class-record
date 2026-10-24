@@ -71,6 +71,18 @@ const sectionSchema = new Schema(
       final: { CP: Number, EA: Number, MPT: Number, CPT: Number },
     },
     items: [itemSchema],
+    // Attendance: each period's sessions count as one item inside CP or EA (or are not graded).
+    attendance: {
+      component: { type: String, enum: ['CP', 'EA', ''], default: '' },
+      late: { type: Number, default: 0.5, min: 0, max: 1 }, // points for "late"; present = 1, absent = 0
+      sessions: [
+        new Schema({
+          date: { type: String, required: true }, // YYYY-MM-DD
+          period: { type: String, enum: ['MID', 'POST'], default: 'MID' },
+          label: { type: String, trim: true },
+        }),
+      ],
+    },
     published: { type: Boolean, default: false },
   },
   { timestamps: true }
@@ -85,6 +97,7 @@ const enrollmentSchema = new Schema(
     section: { type: Schema.Types.ObjectId, ref: 'Section', required: true },
     student: { type: Schema.Types.ObjectId, ref: 'Student', required: true },
     scores: { type: Map, of: Number, default: {} }, // itemId -> score
+    attendance: { type: Map, of: String, default: {} }, // sessionId -> P | L | A | E
     bonus: { type: Number, default: 0 },
   },
   { timestamps: true }

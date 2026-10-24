@@ -3,10 +3,11 @@ import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
 import { User, Student, Section, Enrollment, audit } from './models.js';
-import { COMPONENTS, computeGrades } from './grading.js';
+import { COMPONENTS, MARKS, attendanceItems, computeGrades } from './grading.js';
 import { saveCredentials } from './credentials.js';
 import { cleanSchedule, legacyFields } from './schedule.js';
 import { mailConfigured, sendStudentCredentials } from './mailer.js';
+import { buildGradingWorkbook, gradingFileName } from './exportWorkbook.js';
 import admin from './admin.js';
 import {
   clearSession,
@@ -82,10 +83,13 @@ router.get(
       .filter((e) => e.section?.published)
       .map((e) => {
         const s = e.section;
+        // Attendance shows up as one "Attendance" item per period inside CP or EA.
+        const att = attendanceItems(s, e);
         return {
           section: { ...sectionSummary(s), weights: s.weights },
-          items: s.items.map(itemDto),
-          scores: Object.fromEntries(e.scores),
+          items: [...s.items.map(itemDto), ...att.map(attItemDto)],
+          scores: { ...Object.fromEntries(e.scores), ...Object.fromEntries(att.map((a) => [a._id, a.score])) },
+          attendance: attendanceSummary(s, e),
           bonus: e.bonus,
           grades: computeGrades(s, e),
         };
@@ -471,6 +475,115 @@ faculty.delete(
   })
 );
 
+// Excel grading sheet: Summary + one sheet per section.
+faculty.get(
+  '/export',
+  wrap(async (req, res) => {
+    const { wb, sections } = await buildGradingWorkbook(req.user);
+    const name = gradingFileName(req.user, sections);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`);
+    await wb.xlsx.write(res);
+    res.end();
+  })
+);
+
+// ---------- Attendance ----------
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+faculty.patch(
+  '/sections/:id/attendance',
+  ownSection,
+  wrap(async (req, res) => {
+    const { component, late } = req.body || {};
+    const att = req.section.attendance || (req.section.attendance = { sessions: [] });
+    if (component !== undefined) {
+      if (!['CP', 'EA', ''].includes(component)) return res.status(400).json({ error: 'Choose CP, EA or Not graded.' });
+      if (component !== att.component) audit(req.user, 'attendance.settings', sectionLabel(req.section), `counts toward ${component || 'nothing (not graded)'}`);
+      att.component = component;
+    }
+    if (late !== undefined) {
+      const n = Number(late);
+      if (!(n >= 0 && n <= 1)) return res.status(400).json({ error: 'Late must be between 0 and 1 point.' });
+      att.late = n;
+    }
+    await req.section.save();
+    res.json(await sectionDetail(req.section));
+  })
+);
+
+faculty.post(
+  '/sections/:id/attendance/sessions',
+  ownSection,
+  wrap(async (req, res) => {
+    const { date, period, label, markAll } = req.body || {};
+    if (!DATE.test(String(date || ''))) return res.status(400).json({ error: 'Choose the date of the class.' });
+    const att = req.section.attendance || (req.section.attendance = { sessions: [] });
+    if (att.sessions.length >= 200) return res.status(400).json({ error: 'A section can have at most 200 sessions.' });
+    att.sessions.push({ date, period: period === 'POST' ? 'POST' : 'MID', label: str(label, 40) });
+    att.sessions.sort((a, b) => a.date.localeCompare(b.date));
+    await req.section.save();
+    const session = att.sessions.find((s) => s.date === date && s.label === str(label, 40) && s.period === (period === 'POST' ? 'POST' : 'MID'));
+    if (MARKS.includes(markAll))
+      await Enrollment.updateMany({ section: req.section._id }, { $set: { [`attendance.${session._id}`]: markAll } });
+    res.json(await sectionDetail(req.section));
+  })
+);
+
+faculty.patch(
+  '/sections/:id/attendance/sessions/:sid',
+  ownSection,
+  wrap(async (req, res) => {
+    const s = req.section.attendance?.sessions.id(req.params.sid);
+    if (!s) return res.status(404).json({ error: 'Session not found' });
+    const { date, period, label } = req.body || {};
+    if (date !== undefined) {
+      if (!DATE.test(String(date))) return res.status(400).json({ error: 'Invalid date' });
+      s.date = date;
+    }
+    if (period !== undefined) s.period = period === 'POST' ? 'POST' : 'MID';
+    if (label !== undefined) s.label = str(label, 40);
+    req.section.attendance.sessions.sort((a, b) => a.date.localeCompare(b.date));
+    await req.section.save();
+    res.json(await sectionDetail(req.section));
+  })
+);
+
+faculty.delete(
+  '/sections/:id/attendance/sessions/:sid',
+  ownSection,
+  wrap(async (req, res) => {
+    const s = req.section.attendance?.sessions.id(req.params.sid);
+    if (!s) return res.status(404).json({ error: 'Session not found' });
+    s.deleteOne();
+    await req.section.save();
+    await Enrollment.updateMany({ section: req.section._id }, { $unset: { [`attendance.${req.params.sid}`]: '' } });
+    audit(req.user, 'attendance.delete', sectionLabel(req.section), `session ${s.date}${s.label ? ` (${s.label})` : ''} and its marks`);
+    res.json(await sectionDetail(req.section));
+  })
+);
+
+// Mark one student (studentId) or the whole session (no studentId). mark: P | L | A | E | null (clear).
+faculty.put(
+  '/sections/:id/attendance/marks',
+  ownSection,
+  wrap(async (req, res) => {
+    const { sessionId, studentId, mark } = req.body || {};
+    if (!req.section.attendance?.sessions.id(sessionId)) return res.status(404).json({ error: 'Session not found' });
+    if (mark !== null && !MARKS.includes(mark)) return res.status(400).json({ error: 'Invalid mark' });
+    const key = `attendance.${sessionId}`;
+    const update = mark === null ? { $unset: { [key]: '' } } : { $set: { [key]: mark } };
+    if (!studentId) {
+      await Enrollment.updateMany({ section: req.section._id }, update);
+      return res.json(await sectionDetail(req.section));
+    }
+    const enrollment = await Enrollment.findOneAndUpdate({ section: req.section._id, student: studentId }, update, { new: true });
+    if (!enrollment) return res.status(404).json({ error: 'Student not in section' });
+    res.json({ grades: computeGrades(req.section, enrollment), attendance: attendanceSummary(req.section, enrollment) });
+  })
+);
+
 router.use('/faculty', faculty);
 router.use('/admin', admin);
 
@@ -498,6 +611,30 @@ function itemDto(i) {
   return { id: i._id, component: i.component, period: i.period, label: i.label, max: i.max };
 }
 
+// Attendance items are computed, not stored; "virtual" tells the client they can't be edited or deleted.
+function attItemDto(a) {
+  return { id: a._id, component: a.component, period: a.period, label: a.label, max: a.max, virtual: 'attendance', sessions: a.sessions };
+}
+
+function attendanceDto(section) {
+  const att = section.attendance || {};
+  return {
+    component: att.component || '',
+    late: att.late ?? 0.5,
+    sessions: (att.sessions || []).map((s) => ({ id: s._id, date: s.date, period: s.period, label: s.label || '' })),
+  };
+}
+
+// A student's marks plus present/late/absent/excused counts per period.
+function attendanceSummary(section, enrollment) {
+  const raw = enrollment.attendance;
+  const marks = raw instanceof Map ? Object.fromEntries(raw) : { ...(raw || {}) };
+  const counts = { P: 0, L: 0, A: 0, E: 0, none: 0 };
+  for (const s of section.attendance?.sessions || []) counts[marks[String(s._id)] || 'none']++;
+  const items = Object.fromEntries(attendanceItems(section, enrollment).map((a) => [a.period, { score: a.score, max: a.max }]));
+  return { marks, counts, items };
+}
+
 async function sectionDetail(section) {
   const enrollments = await Enrollment.find({ section: section._id }).populate('student');
   const users = await User.find({ student: { $in: enrollments.map((e) => e.student?._id) }, role: 'student' }, 'student mustChangePassword credentialsSentAt');
@@ -513,14 +650,23 @@ async function sectionDetail(section) {
         email: e.student.email,
         account: accountStatus(userBy[String(e.student._id)]),
       },
-      scores: Object.fromEntries(e.scores),
+      scores: { ...Object.fromEntries(e.scores), ...Object.fromEntries(attendanceItems(section, e).map((a) => [a._id, a.score])) },
+      attendance: attendanceSummary(section, e),
       bonus: e.bonus,
       grades: computeGrades(section, e),
     }))
     .sort((a, b) => a.student.name.localeCompare(b.student.name));
+  // Column headers for attendance: the number of sessions in each period (a student's own max can be lower if excused).
+  const att = section.attendance;
+  const attColumns = att?.component
+    ? ['MID', 'POST']
+        .map((period) => ({ period, n: (att.sessions || []).filter((s) => s.period === period).length }))
+        .filter((c) => c.n)
+        .map(({ period, n }) => attItemDto({ _id: `att-${period}`, component: att.component, period, label: 'Attendance', max: n, sessions: n }))
+    : [];
   return {
-    section: { ...sectionSummary(section), published: section.published, weights: section.weights },
-    items: section.items.map(itemDto),
+    section: { ...sectionSummary(section), published: section.published, weights: section.weights, attendance: attendanceDto(section) },
+    items: [...section.items.map(itemDto), ...attColumns],
     rows,
   };
 }

@@ -109,3 +109,17 @@ Verified against the Excel file: Midterm/Final % and equivalents match for all 1
 - **Website → Vercel** (`client/`): import the repository with **Root Directory = `client`**. `client/vercel.json` builds with Vite and forwards `/api/*` to `https://nu-moa-class-record-api.onrender.com`, so sign-in cookies stay on the Vercel domain. If the Render service gets a different address, update that URL.
 - **Brevo:** Render's outgoing IP addresses change, so in Brevo → Security → Authorised IPs either deactivate blocking for API keys or add Render's outbound IPs (Render → service → Connect → Outbound).
 - Create the first admin on the server with `npm run create-admin -- admin "Full Name"` (Render → Shell), or copy the local database to Atlas.
+
+## Attendance
+
+On a section page, open the **Attendance** tab.
+
+- **Counts toward:** Class Participation, Enabling Activities, or Not graded. Each period's attendance becomes one "Attendance" item inside that component: present = 1 point, late = the chosen value (default 0.5), absent = 0; excused sessions are not counted and unmarked sessions count as absent.
+- **Add session:** date, Midterms / Post Midterms, optional label; "Mark everyone present" is on by default.
+- Click a cell to cycle Present → Late → Absent → Excused → blank. Column buttons mark everyone present or delete a session.
+- Attendance appears read-only in the grade grid and in the student's grade breakdown.
+
+## Export grading sheet
+
+- **Faculty dashboard → Export grading sheet** downloads one Excel file: a Summary sheet plus one sheet per section (header block, CP / EA by period, MPT, CPT, attendance, bonus, Midterm and Final % and equivalents, remarks).
+- From the command line (writes into a folder, never overwrites): `npm run export-grades -- <faculty email> "<folder>"`. Set `MONGODB_URI` to the Atlas string to export the online data.

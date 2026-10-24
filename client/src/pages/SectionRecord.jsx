@@ -4,6 +4,7 @@ import { api, COMPONENTS, PERIODS, fmt, groupItems, schedule, sortItems } from '
 import { AddStudentsModal, ImportResultModal, deleteSection } from '../Roster.jsx';
 import { EditSectionModal } from '../SectionForm.jsx';
 import { ACCOUNT_LABEL, StudentAccountsModal } from '../StudentAccounts.jsx';
+import { AttendanceView } from '../Attendance.jsx';
 import { Avatar, EmptyState, EqBadge, ErrorState, Hero, Icon, Modal, PageLoader, Stat, titleCase, useUI } from '../ui.jsx';
 
 const SCALE = ['4.0', '3.5', '3.0', '2.5', '2.0', '1.5', '1.0', 'R'];
@@ -22,6 +23,7 @@ export default function SectionRecord() {
   const [panel, setPanel] = useState(null); // 'item' | 'weights' | 'students'
   const [resetInfo, setResetInfo] = useState(null);
   const [importResult, setImportResult] = useState(location.state?.result || null);
+  const [view, setView] = useState('grades'); // 'grades' | 'attendance'
 
   useEffect(() => {
     api(`/faculty/sections/${id}`).then(setData).catch((e) => setError(e.message));
@@ -223,6 +225,19 @@ export default function SectionRecord() {
             </EmptyState>
           </div>
         ) : (
+          <>
+          <div className="view-tabs" role="tablist">
+            <button role="tab" aria-selected={view === 'grades'} onClick={() => setView('grades')}>
+              <Icon name="list" size={15} /> Grades
+            </button>
+            <button role="tab" aria-selected={view === 'attendance'} onClick={() => setView('attendance')}>
+              <Icon name="calendar" size={15} /> Attendance
+              {section.attendance?.sessions?.length > 0 && <span className="count-badge">{section.attendance.sessions.length}</span>}
+            </button>
+          </div>
+          {view === 'attendance' ? (
+            <AttendanceView sectionId={id} data={data} setData={setData} query={query} setQuery={setQuery} />
+          ) : (
           <div className="card table-card">
             <div className="table-toolbar">
               <span className="input-icon">
@@ -253,11 +268,19 @@ export default function SectionRecord() {
                   </tr>
                   <tr>
                     {items.map((it) => (
-                      <th key={it.id} className={`item-head ${groupStarts.has(it.id) ? 'gstart' : ''}`}>
-                        <span>{it.label}</span>
-                        <button className="x" title={`Delete ${it.label}`} onClick={() => removeItem(it)}>
-                          <Icon name="x" size={12} strokeWidth={2.5} />
-                        </button>
+                      <th key={it.id} className={`item-head ${groupStarts.has(it.id) ? 'gstart' : ''} ${it.virtual ? 'virtual' : ''}`}>
+                        {it.virtual ? (
+                          <button className="att-head" title="From the Attendance tab" onClick={() => setView('attendance')}>
+                            <Icon name="calendar" size={12} /> Attend.
+                          </button>
+                        ) : (
+                          <>
+                            <span>{it.label}</span>
+                            <button className="x" title={`Delete ${it.label}`} onClick={() => removeItem(it)}>
+                              <Icon name="x" size={12} strokeWidth={2.5} />
+                            </button>
+                          </>
+                        )}
                       </th>
                     ))}
                   </tr>
@@ -285,7 +308,14 @@ export default function SectionRecord() {
                       </td>
                       {items.map((it, ci) => (
                         <td key={it.id} className={groupStarts.has(it.id) ? 'gstart' : undefined}>
-                          <ScoreCell row={ri} col={ci} value={r.scores[it.id]} max={it.max} onSave={(v) => saveScore(r.student.id, it.id, v)} />
+                          {it.virtual ? (
+                            // Computed from attendance; a student's own max is lower when excused.
+                            <span className="cell ro" title={`Attendance: ${r.scores[it.id] ?? 0} / ${r.attendance?.items?.[it.period]?.max ?? it.max}`}>
+                              {r.scores[it.id] ?? 0}
+                            </span>
+                          ) : (
+                            <ScoreCell row={ri} col={ci} value={r.scores[it.id]} max={it.max} onSave={(v) => saveScore(r.student.id, it.id, v)} />
+                          )}
                         </td>
                       ))}
                       <td className="gstart">
@@ -312,6 +342,8 @@ export default function SectionRecord() {
               {rows.length === 0 && <div className="no-results">No students match “{query}”.</div>}
             </div>
           </div>
+          )}
+          </>
         )}
       </div>
 

@@ -38,10 +38,40 @@ function fraction(items, scores) {
   return got / max;
 }
 
+export const MARKS = ['P', 'L', 'A', 'E'];
+const markOf = (enrollment, sessionId) => {
+  const m = enrollment.attendance;
+  return (m instanceof Map ? m.get(String(sessionId)) : m?.[String(sessionId)]) || null;
+};
+
+// One attendance item per period, for this student: present = 1, late = section setting, absent = 0;
+// excused sessions don't count. A session the faculty hasn't marked counts as absent (like a blank score).
+export function attendanceItems(section, enrollment) {
+  const att = section.attendance;
+  if (!att?.component || !att.sessions?.length) return [];
+  const late = att.late ?? 0.5;
+  return ['MID', 'POST'].flatMap((period) => {
+    const sessions = att.sessions.filter((s) => s.period === period);
+    let max = 0;
+    let score = 0;
+    for (const s of sessions) {
+      const mark = markOf(enrollment, s._id);
+      if (mark === 'E') continue;
+      max += 1;
+      score += mark === 'P' ? 1 : mark === 'L' ? late : 0;
+    }
+    if (!max) return [];
+    return [{ _id: `att-${period}`, component: att.component, period, label: 'Attendance', max, score: round2(score), sessions: sessions.length }];
+  });
+}
+
 export function computeGrades(section, enrollment) {
-  const items = section.items || [];
+  const att = attendanceItems(section, enrollment);
+  const items = [...(section.items || []), ...att];
   const w = section.weights || DEFAULT_WEIGHTS;
-  const scores = enrollment.scores || {};
+  const raw = enrollment.scores || {};
+  const scores = new Map(raw instanceof Map ? raw : Object.entries(raw));
+  for (const a of att) scores.set(a._id, a.score);
   const pick = (component, period) =>
     items.filter((i) => i.component === component && (!period || i.period === period));
 

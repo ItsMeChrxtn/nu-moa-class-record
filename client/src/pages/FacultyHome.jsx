@@ -34,9 +34,17 @@ export default function FacultyHome() {
         title={<>{greeting()}, <span className="accent">{firstName(user.name)}.</span></>}
         lead="Choose a section to encode scores, adjust grade percentages, and publish grades to students."
         actions={
-          <button className="btn primary" onClick={() => setCreating(true)}>
-            <Icon name="plus" size={16} /> New Section
-          </button>
+          <>
+            {sections.length > 0 && (
+              // Downloads one Excel file: a Summary sheet plus one sheet per section.
+              <a className="btn" href="/api/faculty/export" download>
+                <Icon name="download" size={16} /> Export grading sheet
+              </a>
+            )}
+            <button className="btn primary" onClick={() => setCreating(true)}>
+              <Icon name="plus" size={16} /> New Section
+            </button>
+          </>
         }
       />
       <div className="container lift">

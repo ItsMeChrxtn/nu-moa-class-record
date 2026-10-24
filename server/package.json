@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "import": "node scripts/import-excel.js",
     "create-admin": "node scripts/create-admin.js",
+    "export-grades": "node scripts/export-grades.js",
     "test": "node --test"
   },
   "dependencies": {

@@ -7,7 +7,8 @@
     "build": "npm run build --prefix client",
     "start": "npm start --prefix server",
     "import": "npm run import --prefix server --",
-    "create-admin": "npm run create-admin --prefix server --"
+    "create-admin": "npm run create-admin --prefix server --",
+    "export-grades": "npm run export-grades --prefix server --"
   },
   "devDependencies": {
     "concurrently": "9.1.2"
