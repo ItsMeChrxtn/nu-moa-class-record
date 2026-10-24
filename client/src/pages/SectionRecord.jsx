@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, COMPONENTS, PERIODS, fmt, groupItems, schedule, sortItems } from '../api.js';
 import { AddStudentsModal, ImportResultModal, deleteSection } from '../Roster.jsx';
 import { EditSectionModal } from '../SectionForm.jsx';
+import { ACCOUNT_LABEL, StudentAccountsModal } from '../StudentAccounts.jsx';
 import { Avatar, EmptyState, EqBadge, ErrorState, Hero, Icon, Modal, PageLoader, Stat, titleCase, useUI } from '../ui.jsx';
 
 const SCALE = ['4.0', '3.5', '3.0', '2.5', '2.0', '1.5', '1.0', 'R'];
@@ -148,6 +149,9 @@ export default function SectionRecord() {
             <button className="btn" onClick={() => setPanel('students')}>
               <Icon name="userPlus" size={16} /> Students
             </button>
+            <button className="btn" onClick={() => setPanel('accounts')}>
+              <Icon name="mail" size={16} /> Student accounts
+            </button>
             <button className="btn" onClick={() => setPanel('weights')}>
               <Icon name="sliders" size={16} /> Percentage
             </button>
@@ -272,7 +276,10 @@ export default function SectionRecord() {
                           <Avatar name={r.student.name} size={30} />
                           <div style={{ minWidth: 0 }}>
                             <div className="sname" title={[r.student.name, r.student.email].filter(Boolean).join('\n')}>{r.student.name}</div>
-                            <div className="sno">{r.student.studentNo}</div>
+                            <div className="sno">
+                              {r.student.studentNo}
+                              <i className={`acct-dot acct-${r.student.account}`} title={`Account: ${ACCOUNT_LABEL[r.student.account] || r.student.account}`} />
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -343,12 +350,36 @@ export default function SectionRecord() {
           }}
         />
       )}
-      {importResult && <ImportResultModal sectionCode={section.code} result={importResult} onClose={() => setImportResult(null)} />}
+      {importResult && (
+        <ImportResultModal
+          sectionCode={section.code}
+          result={importResult}
+          onClose={() => setImportResult(null)}
+          onSendAccounts={() => {
+            setImportResult(null);
+            setPanel('accounts');
+          }}
+        />
+      )}
+      {panel === 'accounts' && (
+        <StudentAccountsModal
+          section={section}
+          onClose={closePanel}
+          onDone={() => api(`/faculty/sections/${id}`).then(setData).catch(() => {})}
+        />
+      )}
 
       {resetInfo && (
         <Modal title="New temporary password" subtitle="This is shown only once." icon="key" onClose={() => setResetInfo(null)} width={440}
           footer={<button className="btn primary" onClick={() => setResetInfo(null)}>Done</button>}
         >
+          {resetInfo.mail?.sent ? (
+            <div className="alert ok"><Icon name="check" />Emailed to <strong>{resetInfo.email}</strong>.</div>
+          ) : resetInfo.mail?.configured && resetInfo.email ? (
+            <div className="alert error"><Icon name="alert" />The email could not be sent ({resetInfo.mail.error}). Give the student this password.</div>
+          ) : (
+            <div className="alert info"><Icon name="info" />{resetInfo.email ? 'Email is not set up, so' : 'This student has no email on file, so'} give them this password yourself.</div>
+          )}
           <div className="cred-who">
             <Avatar name={resetInfo.name} size={42} />
             <div><strong>{resetInfo.name}</strong><span className="muted small">The student will change it at their next login.</span></div>

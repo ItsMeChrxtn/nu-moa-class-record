@@ -41,7 +41,7 @@ On the faculty dashboard, click **New Section** and drop the master list PDF. Th
 - Review and edit the list before saving (remove rows or add students manually).
 - Items and percentages can be copied from another section.
 - On the section page, the **Students** button imports more students. Scores of students already enrolled are kept.
-- New accounts get a temporary password shown once (with a CSV download) and also saved in `server/credentials/`.
+- **Student accounts** (button on the section page) creates accounts and emails each student their student number and temporary password (Brevo). Students who already signed in are never changed; already-emailed students are skipped unless *Resend* is chosen; students without an email can get accounts with the passwords shown on screen (CSV download, also saved in `server/credentials/`). The grade grid shows each student’s account status. Importing a class list no longer creates accounts by itself.
 
 ## Admin
 

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { api, rowsFromText } from './api.js';
 import { ScheduleEditor, blankRow, filledRows } from './SectionForm.jsx';
 import { EMAIL, isStudentNo } from './studentParser.js';
-import { Avatar, Icon, Modal, useUI } from './ui.jsx';
+import { Avatar, Icon, Modal } from './ui.jsx';
 
 // PDF drop zone + editable preview of the class list before anything is saved.
 export function StudentImporter({ students, setStudents, onDetails }) {
@@ -332,18 +332,7 @@ export function AddStudentsModal({ section, onClose, onDone }) {
   );
 }
 
-function downloadCsv(filename, rows) {
-  const csv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const text = ['Username,Name,TempPassword', ...rows.map((r) => [r.studentNo, r.name, r.tempPassword].map(csv).join(','))].join('\r\n');
-  const url = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
-  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-export function ImportResultModal({ sectionCode, result, onClose }) {
-  const { toast } = useUI();
-  const creds = result.credentials || [];
+export function ImportResultModal({ sectionCode, result, onClose, onSendAccounts }) {
   return (
     <Modal
       title="Enrollment complete"
@@ -351,55 +340,33 @@ export function ImportResultModal({ sectionCode, result, onClose }) {
       icon="check"
       tone="high"
       onClose={onClose}
-      width={620}
+      width={560}
       footer={
         <>
-          {creds.length > 0 && (
-            <button className="btn" onClick={() => downloadCsv(`passwords-${sectionCode}.csv`, creds)}>
-              <Icon name="download" size={16} /> Download (CSV)
+          <button className="btn" onClick={onClose}>Later</button>
+          {onSendAccounts && (
+            <button className="btn primary" onClick={onSendAccounts}>
+              <Icon name="mail" size={16} /> Send student accounts
             </button>
           )}
-          <button className="btn primary" onClick={onClose}>OK</button>
         </>
       }
     >
       <div className="result-stats">
         <div><strong>{result.added}</strong><span>newly enrolled</span></div>
         <div><strong>{result.already}</strong><span>already enrolled</span></div>
-        <div><strong>{creds.length}</strong><span>new accounts</span></div>
+        <div><strong>{result.emails || 0}</strong><span>with email</span></div>
       </div>
       {result.skipped?.length > 0 && (
         <div className="alert info"><Icon name="info" />Skipped ({result.skipped.length}): {result.skipped.join(', ')}</div>
       )}
-      {result.emails > 0 && (
-        <div className="alert ok"><Icon name="check" />Saved {result.emails} student email{result.emails === 1 ? '' : 's'} from the list.</div>
-      )}
-      {creds.length > 0 && (
-        <>
-          <div className="alert info">
-            <Icon name="key" />
-            Temporary passwords for the new accounts. Give each student only their own password. A copy is also saved in server/credentials/.
-          </div>
-          <div className="cred-table">
-            {creds.map((c) => (
-              <div key={c.studentNo} className="cred-line">
-                <div className="roster-info">
-                  <strong>{c.name}</strong>
-                  <span>{c.studentNo}</span>
-                </div>
-                <code>{c.tempPassword}</code>
-                <button
-                  className="icon-btn"
-                  title="Copy"
-                  onClick={() => navigator.clipboard.writeText(`${c.studentNo} / ${c.tempPassword}`).then(() => toast('Copied'))}
-                >
-                  <Icon name="copy" size={15} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+      <div className="alert info">
+        <Icon name="mail" />
+        <span>
+          <strong>Next:</strong> send the students their accounts. Each student gets their student number and a temporary password by
+          email. You can also do this later with <strong>Student accounts</strong> on the section page.
+        </span>
+      </div>
     </Modal>
   );
 }

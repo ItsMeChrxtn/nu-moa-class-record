@@ -484,6 +484,31 @@ table.record { border-collapse: separate; border-spacing: 0; font-size: 0.84rem;
 .cred-line:last-child { border-bottom: 0; }
 .cred-line code { font-weight: 700; color: var(--blue); letter-spacing: 0.04em; }
 
+/* ───────────────────────── Student accounts ───────────────────────── */
+.acct-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+.acct-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); font-family: var(--mono); font-size: 0.7rem; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
+.acct-chip strong { color: var(--ink); }
+.acct-chip i { width: 7px; height: 7px; border-radius: 2px; background: var(--ink-3); }
+.acct-temp i { background: var(--amber); }
+.acct-sent i { background: var(--blue); }
+.acct-active i { background: var(--teal); }
+.acct-sent { color: var(--blue); }
+.acct-active { color: var(--teal); }
+.acct-list { max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; }
+.acct-row { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+.acct-row:last-child { border-bottom: 0; }
+.no-mail { font-style: normal; color: var(--red-ink); }
+.check { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.check:hover { border-color: var(--line-2); }
+.check input { width: 16px; height: 16px; margin-top: 2px; accent-color: var(--blue); flex: none; }
+.check strong { display: block; font-size: 0.88rem; }
+.check small { display: block; font-size: 0.8rem; color: var(--ink-2); line-height: 1.4; }
+/* Account dot next to the student number in the grade grid. */
+.acct-dot { display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 2px; vertical-align: 1px; background: var(--line-2); }
+.acct-dot.acct-temp { background: var(--amber); }
+.acct-dot.acct-sent { background: var(--blue); }
+.acct-dot.acct-active { background: var(--teal); }
+
 /* ───────────────────────── Admin ───────────────────────── */
 .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 28px 0 16px; }
 .tabs button { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 16px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--surface); font-family: var(--mono); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-2); transition: transform 0.12s, box-shadow 0.12s; }

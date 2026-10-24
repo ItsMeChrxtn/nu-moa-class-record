@@ -13,6 +13,7 @@ const userSchema = new Schema(
     mustChangePassword: { type: Boolean, default: true },
     disabled: { type: Boolean, default: false }, // set by an admin; blocks sign-in
     lastLoginAt: Date,
+    credentialsSentAt: Date, // when the current temporary password was emailed
   },
   { timestamps: true }
 );

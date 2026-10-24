@@ -6,6 +6,7 @@ import { User, Student, Section, Enrollment, audit } from './models.js';
 import { COMPONENTS, computeGrades } from './grading.js';
 import { saveCredentials } from './credentials.js';
 import { cleanSchedule, legacyFields } from './schedule.js';
+import { mailConfigured, sendStudentCredentials } from './mailer.js';
 import admin from './admin.js';
 import {
   clearSession,
@@ -231,13 +232,23 @@ faculty.post(
     const enrolled = await Enrollment.exists({ section: req.section._id, student: req.params.studentId });
     if (!enrolled) return res.status(404).json({ error: 'Student not in section' });
     const user = await User.findOne({ student: req.params.studentId, role: 'student' });
-    if (!user) return res.status(404).json({ error: 'No account' });
+    if (!user) return res.status(404).json({ error: 'This student has no account yet. Use “Student accounts” to create it.' });
     const pw = tempPassword();
     user.passwordHash = await hashPassword(pw);
     user.mustChangePassword = true;
+    user.credentialsSentAt = undefined;
     await user.save();
-    audit(req.user, 'student.reset-password', `${user.name} (${user.username})`, sectionLabel(req.section));
-    res.json({ username: user.username, tempPassword: pw });
+    // Email it when we can; the password is shown on screen either way.
+    const student = await Student.findById(req.params.studentId);
+    const mail = EMAIL.test(student?.email || '')
+      ? await sendStudentCredentials({ email: student.email, name: user.name, studentNo: user.username, tempPassword: pw, section: req.section, faculty: req.user.name })
+      : { sent: false, configured: mailConfigured(), error: 'This student has no email on file.' };
+    if (mail.sent) {
+      user.credentialsSentAt = new Date();
+      await user.save();
+    }
+    audit(req.user, 'student.reset-password', `${user.name} (${user.username})`, `${sectionLabel(req.section)}${mail.sent ? ' · emailed' : ''}`);
+    res.json({ username: user.username, tempPassword: pw, mail, email: student?.email || null });
   })
 );
 
@@ -321,21 +332,7 @@ faculty.post(
         { upsert: true, new: true }
       );
       if (EMAIL.test(email)) result.emails = (result.emails || 0) + 1;
-      if (!(await User.exists({ student: student._id }))) {
-        if (await User.exists({ username: studentNo })) {
-          result.skipped.push(studentNo);
-          continue;
-        }
-        const pw = tempPassword();
-        await User.create({
-          username: studentNo,
-          passwordHash: await hashPassword(pw),
-          role: 'student',
-          name: student.name,
-          student: student._id,
-        });
-        result.credentials.push({ studentNo, name: student.name, tempPassword: pw });
-      }
+      // Accounts are created (and emailed) from the section's "Student accounts" button.
       const r = await Enrollment.updateOne(
         { section: req.section._id, student: student._id },
         { $setOnInsert: { bonus: 0 } },
@@ -344,10 +341,107 @@ faculty.post(
       if (r.upsertedCount) result.added++;
       else result.already++;
     }
-    if (result.credentials.length) saveCredentials(req.section.code, result.credentials);
-    if (result.added)
-      audit(req.user, 'section.enroll', sectionLabel(req.section), `${result.added} students enrolled, ${result.credentials.length} new accounts`);
+    if (result.added) audit(req.user, 'section.enroll', sectionLabel(req.section), `${result.added} students enrolled`);
     res.json({ ...(await sectionDetail(req.section)), result });
+  })
+);
+
+// ---------- Student accounts ----------
+
+// Account state of one student: none, sent (temp password emailed), temp (temp password, not emailed), active.
+function accountStatus(user) {
+  if (!user) return 'none';
+  if (!user.mustChangePassword) return 'active';
+  return user.credentialsSentAt ? 'sent' : 'temp';
+}
+
+faculty.get(
+  '/sections/:id/accounts',
+  ownSection,
+  wrap(async (req, res) => {
+    const enrollments = await Enrollment.find({ section: req.section._id }).populate('student');
+    const ids = enrollments.map((e) => e.student?._id).filter(Boolean);
+    const users = await User.find({ student: { $in: ids }, role: 'student' });
+    const byStudent = Object.fromEntries(users.map((u) => [String(u.student), u]));
+    const students = enrollments
+      .filter((e) => e.student)
+      .map((e) => {
+        const u = byStudent[String(e.student._id)];
+        return {
+          id: e.student._id,
+          studentNo: e.student.studentNo,
+          name: e.student.name,
+          email: e.student.email || null,
+          status: accountStatus(u),
+          sentAt: u?.credentialsSentAt || null,
+          lastLoginAt: u?.lastLoginAt || null,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ students, mailConfigured: mailConfigured() });
+  })
+);
+
+// Create accounts and email temporary passwords. Never touches a student who already set their own password.
+// Body: { resend: bool (also students already emailed), includeNoEmail: bool (create, show passwords here) }
+faculty.post(
+  '/sections/:id/accounts/send',
+  ownSection,
+  wrap(async (req, res) => {
+    const { resend = false, includeNoEmail = false } = req.body || {};
+    const enrollments = await Enrollment.find({ section: req.section._id }).populate('student');
+    const result = { sent: 0, failed: [], shown: [], skippedActive: 0, skippedSent: 0, skippedNoEmail: 0 };
+    const hasMail = mailConfigured();
+    const queue = [];
+
+    for (const e of enrollments) {
+      const s = e.student;
+      if (!s) continue;
+      let user = await User.findOne({ student: s._id, role: 'student' });
+      const status = accountStatus(user);
+      if (status === 'active') { result.skippedActive++; continue; }
+      if (status === 'sent' && !resend) { result.skippedSent++; continue; }
+      const canEmail = hasMail && EMAIL.test(s.email || '');
+      if (!canEmail && !includeNoEmail) { result.skippedNoEmail++; continue; }
+      if (!user && (await User.exists({ username: s.studentNo }))) {
+        result.failed.push({ studentNo: s.studentNo, name: s.name, error: 'Username already used by another account' });
+        continue;
+      }
+      // New temporary password (old temporary ones were never used, since the student has not signed in).
+      const pw = tempPassword();
+      if (!user) user = new User({ username: s.studentNo, role: 'student', name: s.name, student: s._id });
+      user.passwordHash = await hashPassword(pw);
+      user.mustChangePassword = true;
+      user.credentialsSentAt = undefined;
+      await user.save();
+      queue.push({ user, student: s, pw, canEmail });
+    }
+
+    // Send a few at a time so a whole class goes out quickly without hammering Brevo.
+    const faculty = req.user.name;
+    for (let i = 0; i < queue.length; i += 5) {
+      await Promise.all(
+        queue.slice(i, i + 5).map(async ({ user, student, pw, canEmail }) => {
+          const row = { studentNo: student.studentNo, name: student.name, email: student.email || null, tempPassword: pw };
+          if (!canEmail) return result.shown.push(row);
+          const mail = await sendStudentCredentials({ email: student.email, name: student.name, studentNo: student.studentNo, tempPassword: pw, section: req.section, faculty });
+          if (mail.sent) {
+            user.credentialsSentAt = new Date();
+            await user.save();
+            result.sent++;
+          } else {
+            // Keep the password visible so the faculty can still hand it out.
+            result.failed.push({ ...row, error: mail.error || 'Email could not be sent' });
+          }
+        })
+      );
+    }
+
+    const notEmailed = [...result.shown, ...result.failed.filter((f) => f.tempPassword)];
+    if (notEmailed.length) saveCredentials(req.section.code, notEmailed);
+    if (queue.length)
+      audit(req.user, 'section.accounts', sectionLabel(req.section), `${result.sent} emailed, ${result.shown.length} shown on screen, ${result.failed.length} failed`);
+    res.json({ result, mailConfigured: hasMail });
   })
 );
 
@@ -406,9 +500,19 @@ function itemDto(i) {
 
 async function sectionDetail(section) {
   const enrollments = await Enrollment.find({ section: section._id }).populate('student');
+  const users = await User.find({ student: { $in: enrollments.map((e) => e.student?._id) }, role: 'student' }, 'student mustChangePassword credentialsSentAt');
+  const userBy = Object.fromEntries(users.map((u) => [String(u.student), u]));
   const rows = enrollments
+    .filter((e) => e.student)
     .map((e) => ({
-      student: { id: e.student._id, studentNo: e.student.studentNo, name: e.student.name, course: e.student.course, email: e.student.email },
+      student: {
+        id: e.student._id,
+        studentNo: e.student.studentNo,
+        name: e.student.name,
+        course: e.student.course,
+        email: e.student.email,
+        account: accountStatus(userBy[String(e.student._id)]),
+      },
       scores: Object.fromEntries(e.scores),
       bonus: e.bonus,
       grades: computeGrades(section, e),
