@@ -724,3 +724,6 @@ button.mark:active { transform: scale(0.92); }
   .foot-note { width: 100%; }
   .toasts { left: 16px; right: 16px; }
 }
+
+.term-group + .term-group { margin-top: 12px; }
+.term-group .section-title-row h2 { font-size: 1.15rem; }

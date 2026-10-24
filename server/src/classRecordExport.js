@@ -163,8 +163,25 @@ export function gradingFileName(faculty, sections) {
   return `GRADING SHEET ${last} ${suffix}.xlsx`.replace(/[\\/:*?"<>|]/g, '-');
 }
 
-export async function buildClassRecord(faculty, templatePath = TEMPLATE_PATH) {
-  const sections = await Section.find({ faculty: faculty._id }).sort({ academicYear: 1, term: 1, code: 1 });
+// The terms a faculty has sections in, newest academic year first, terms in order within a year.
+const TERM_ORDER = ['first', 'second', 'third', 'summer'];
+export const termRank = (t) => {
+  const i = TERM_ORDER.indexOf(String(t || '').trim().toLowerCase().split(/\s+/)[0]);
+  return i < 0 ? 99 : i;
+};
+export async function facultyTerms(faculty) {
+  const sections = await Section.find({ faculty: faculty._id }, 'term academicYear');
+  const seen = new Map();
+  for (const s of sections) seen.set(`${s.academicYear || ''}|${s.term || ''}`, { academicYear: s.academicYear || '', term: s.term || '' });
+  return [...seen.values()].sort((a, b) => b.academicYear.localeCompare(a.academicYear) || termRank(a.term) - termRank(b.term));
+}
+
+// filter: { academicYear, term } limits the file to one term, so terms are never mixed in one workbook.
+export async function buildClassRecord(faculty, templatePath = TEMPLATE_PATH, filter = {}) {
+  const query = { faculty: faculty._id };
+  if (filter.academicYear !== undefined) query.academicYear = filter.academicYear || { $in: ['', null] };
+  if (filter.term !== undefined) query.term = filter.term || { $in: ['', null] };
+  const sections = await Section.find(query).sort({ code: 1 });
   const zip = await JSZip.loadAsync(fs.readFileSync(templatePath));
   const read = (p) => zip.file(p)?.async('string');
   const notes = [];

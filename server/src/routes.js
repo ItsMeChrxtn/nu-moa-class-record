@@ -7,7 +7,7 @@ import { COMPONENTS, MARKS, attendanceItems, computeGrades } from './grading.js'
 import { saveCredentials } from './credentials.js';
 import { cleanSchedule, legacyFields } from './schedule.js';
 import { mailConfigured, sendStudentCredentials } from './mailer.js';
-import { buildClassRecord, gradingFileName } from './classRecordExport.js';
+import { buildClassRecord, facultyTerms, gradingFileName } from './classRecordExport.js';
 import admin from './admin.js';
 import {
   clearSession,
@@ -481,7 +481,11 @@ faculty.delete(
 faculty.get(
   '/export',
   wrap(async (req, res) => {
-    const { buffer, sections } = await buildClassRecord(req.user);
+    // ?academicYear=…&term=… exports one term; without them, the latest term is exported.
+    let filter = { academicYear: req.query.academicYear, term: req.query.term };
+    if (filter.academicYear === undefined && filter.term === undefined) filter = (await facultyTerms(req.user))[0] || {};
+    const { buffer, sections } = await buildClassRecord(req.user, undefined, { academicYear: String(filter.academicYear ?? ''), term: String(filter.term ?? '') });
+    if (!sections.length) return res.status(404).json({ error: 'No sections for that term.' });
     const name = gradingFileName(req.user, sections);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`);
