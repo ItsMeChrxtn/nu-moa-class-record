@@ -75,8 +75,7 @@ class SheetXml {
     const s = this.styleOf(col, r);
     const sa = s ? ` s="${s}"` : '';
     let xml;
-    if (opts.formula) xml = `<c r="${ref}"${sa}${opts.str ? ' t="str"' : ''}><f>${esc(opts.formula)}</f></c>`; // value comes from fullCalcOnLoad
-    else if (value === '' && opts.text) xml = `<c r="${ref}"${sa} t="inlineStr"><is><t></t></is></c>`;
+    if (value === '' && opts.text) xml = `<c r="${ref}"${sa} t="inlineStr"><is><t></t></is></c>`;
     else if (value === null || value === undefined || value === '') xml = `<c r="${ref}"${sa}/>`;
     else if (typeof value === 'number') xml = `<c r="${ref}"${sa}><v>${value}</v></c>`;
     else xml = `<c r="${ref}"${sa} t="inlineStr"><is><t xml:space="preserve">${esc(value)}</t></is></c>`;
@@ -300,9 +299,8 @@ export async function buildClassRecord(faculty, templatePath = TEMPLATE_PATH, fi
     [['AG', 'CP'], ['AH', 'EA'], ['AI', 'MPT'], ['AJ', 'CPT']].forEach(([c, key]) => ws.set(`${c}5`, w.final?.[key] ?? 0));
 
     // Grade Point Equivalence Table (AM3:AR6): the section's own scale, printed like the template
-    // ("96 - 100 | 4.0" …, "59 and Below | R"). Hidden AV:AW turns it into the lookup the grade
-    // formulas use (this sheet's own Grade_table name), with formulas that read the printed table,
-    // so the faculty can also change the table in Excel and the grades follow.
+    // ("96 - 100 | 4.0" …, "59 and Below | R"). The formulas read a numeric copy in hidden AV:AW
+    // through this sheet's own Grade_table name.
     const scale = scaleOf(sec); // high to low
     const from = (min) => Math.ceil(min); // 95.5 -> 96
     const eqValue = (eq) => (/^\d+(\.\d)?$/.test(eq) && Number(eq).toFixed(1) === eq ? Number(eq) : eq);
@@ -312,21 +310,14 @@ export async function buildClassRecord(faculty, templatePath = TEMPLATE_PATH, fi
       ws.set(`${rc}${r}`, row ? `${from(row.min)} - ${i === 0 ? 100 : from(scale[i - 1].min) - 1}` : null);
       ws.set(`${ec}${r}`, row ? eqValue(row.eq) : null);
     });
+    ws.set('AP6', `${from(scale.at(-1).min) - 1} and Below`);
     ws.set('AR6', FAIL_EQ);
-    // Lookup rows go low to high (VLOOKUP approximate match): R from 0, then the table's rows from
-    // the bottom up. "96 - 100" -> 95.5; an empty row becomes another R from 0 and changes nothing.
-    ws.set('AV3', 0);
-    ws.set('AW3', FAIL_EQ);
-    [...slots].reverse().forEach(([rc, ec, r], i) => {
-      const range = `$${rc}$${r}`;
-      const eq = `$${ec}$${r}`;
-      ws.set(`AV${4 + i}`, null, { formula: `IF(TRIM(${range})="",0,IFERROR(VALUE(TRIM(LEFT(${range},FIND("-",${range}&"-")-1)))-0.5,0))` });
-      // text, like the Cover Page table, so the grade shows "4.0" not "4"
-      ws.set(`AW${4 + i}`, null, { formula: `IF(AV${4 + i}=0,"${FAIL_EQ}",IF(ISNUMBER(${eq}),TEXT(${eq},"0.0"),TRIM(${eq}&"")))`, str: true });
+    const lookup = [{ min: 0, eq: FAIL_EQ }, ...[...scale].reverse()];
+    lookup.forEach((row, i) => {
+      ws.set(`AV${3 + i}`, row.min);
+      ws.set(`AW${3 + i}`, String(row.eq)); // text, like the Cover Page table, so the grade shows "4.0" not "4"
     });
-    const lastLookup = 3 + slots.length;
-    ws.set('AP6', null, { formula: `IFERROR(_xlfn.MINIFS(AV4:AV${lastLookup},AV4:AV${lastLookup},">0")-0.5&" and Below","")`, str: true });
-    const gradeTableName = `<definedName name="Grade_table" localSheetId="${templateIndex + 1 + k}">${quoted}$AV$3:$AW$${lastLookup}</definedName>`;
+    const gradeTableName = `<definedName name="Grade_table" localSheetId="${templateIndex + 1 + k}">${quoted}$AV$3:$AW$${2 + lookup.length}</definedName>`;
 
     // Item names and max scores: clear every slot, then fill the used ones.
     for (const c of Object.values(SLOTS).flat()) {
