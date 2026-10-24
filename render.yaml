@@ -1,0 +1,31 @@
+# Render Blueprint for the API (server/). The website itself is deployed on Vercel (client/).
+# Render → New → Blueprint → pick this repository. Fill in the values marked "sync: false".
+services:
+  - type: web
+    name: nu-moa-class-record-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      # Vercel rewrite + Render proxy in front of the app.
+      - key: TRUST_PROXY
+        value: "2"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MONGODB_URI # MongoDB Atlas connection string
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM_EMAIL
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: NU MOA Class Record
+      - key: APP_URL # the Vercel address, for the sign-in link in emails
+        sync: false

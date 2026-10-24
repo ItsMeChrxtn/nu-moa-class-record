@@ -1,0 +1,424 @@
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import rateLimit from 'express-rate-limit';
+import mongoose from 'mongoose';
+import { User, Student, Section, Enrollment, audit } from './models.js';
+import { COMPONENTS, computeGrades } from './grading.js';
+import { saveCredentials } from './credentials.js';
+import { cleanSchedule, legacyFields } from './schedule.js';
+import admin from './admin.js';
+import {
+  clearSession,
+  hashPassword,
+  publicUser,
+  requireAuth,
+  requirePasswordSet,
+  requireRole,
+  setSession,
+  tempPassword,
+} from './auth.js';
+
+const router = express.Router();
+const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+// ---------- Auth ----------
+
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20 });
+
+router.post(
+  '/auth/login',
+  loginLimiter,
+  wrap(async (req, res) => {
+    const { username, password } = req.body || {};
+    // Usernames are stored lowercase (faculty NU emails, student numbers, admin).
+    const user = await User.findOne({ username: String(username || '').trim().toLowerCase() });
+    const ok = user && (await bcrypt.compare(String(password || ''), user.passwordHash));
+    if (!ok) return res.status(401).json({ error: 'Incorrect username or password.' });
+    if (user.disabled)
+      return res.status(403).json({ error: 'This account has been disabled. Please contact the administrator.' });
+    user.lastLoginAt = new Date();
+    await user.save();
+    setSession(res, user);
+    res.json({ user: publicUser(user) });
+  })
+);
+
+router.post('/auth/logout', (req, res) => {
+  clearSession(res);
+  res.json({ ok: true });
+});
+
+router.get('/auth/me', requireAuth, (req, res) => res.json({ user: publicUser(req.user) }));
+
+router.post(
+  '/auth/change-password',
+  requireAuth,
+  wrap(async (req, res) => {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!(await bcrypt.compare(String(currentPassword || ''), req.user.passwordHash)))
+      return res.status(400).json({ error: 'Your current password is incorrect.' });
+    if (typeof newPassword !== 'string' || newPassword.length < 8)
+      return res.status(400).json({ error: 'The new password must be at least 8 characters.' });
+    if (newPassword === currentPassword)
+      return res.status(400).json({ error: 'The new password must be different from the current one.' });
+    req.user.passwordHash = await hashPassword(newPassword);
+    req.user.mustChangePassword = false;
+    await req.user.save();
+    res.json({ user: publicUser(req.user) });
+  })
+);
+
+// ---------- Student ----------
+
+router.get(
+  '/me/records',
+  requireAuth,
+  requirePasswordSet,
+  requireRole('student'),
+  wrap(async (req, res) => {
+    const enrollments = await Enrollment.find({ student: req.user.student }).populate('section');
+    const records = enrollments
+      .filter((e) => e.section?.published)
+      .map((e) => {
+        const s = e.section;
+        return {
+          section: { ...sectionSummary(s), weights: s.weights },
+          items: s.items.map(itemDto),
+          scores: Object.fromEntries(e.scores),
+          bonus: e.bonus,
+          grades: computeGrades(s, e),
+        };
+      });
+    res.json({ records });
+  })
+);
+
+// ---------- Faculty ----------
+
+const faculty = express.Router();
+faculty.use(requireAuth, requirePasswordSet, requireRole('faculty'));
+
+const ownSection = wrap(async (req, res, next) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  const section = await Section.findOne({ _id: req.params.id, faculty: req.user._id });
+  if (!section) return res.status(404).json({ error: 'Not found' });
+  req.section = section;
+  next();
+});
+
+faculty.get(
+  '/sections',
+  wrap(async (req, res) => {
+    const sections = await Section.find({ faculty: req.user._id }).sort({ code: 1 });
+    const counts = await Enrollment.aggregate([
+      { $match: { section: { $in: sections.map((s) => s._id) } } },
+      { $group: { _id: '$section', n: { $sum: 1 } } },
+    ]);
+    const byId = Object.fromEntries(counts.map((c) => [String(c._id), c.n]));
+    res.json({
+      sections: sections.map((s) => ({
+        ...sectionSummary(s),
+        published: s.published,
+        studentCount: byId[String(s._id)] || 0,
+        itemCount: s.items.length,
+      })),
+    });
+  })
+);
+
+faculty.get('/sections/:id', ownSection, wrap(async (req, res) => res.json(await sectionDetail(req.section))));
+
+faculty.patch(
+  '/sections/:id',
+  ownSection,
+  wrap(async (req, res) => {
+    const { published, weights, details } = req.body || {};
+    if (details) {
+      const { data, error } = sectionFields(details, true);
+      if (error) return res.status(400).json({ error });
+      if (data.code === '') return res.status(400).json({ error: 'Section code is required.' });
+      Object.assign(req.section, data);
+      audit(req.user, 'section.update', sectionLabel(req.section), Object.keys(data).filter((k) => !['day', 'time', 'room'].includes(k)).join(', '));
+    }
+    if (typeof published === 'boolean' && published !== req.section.published) {
+      req.section.published = published;
+      audit(req.user, published ? 'section.publish' : 'section.unpublish', sectionLabel(req.section));
+    }
+    if (weights) {
+      const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+      req.section.weights = {
+        midterm: { CP: num(weights.midterm?.CP), EA: num(weights.midterm?.EA), MPT: num(weights.midterm?.MPT) },
+        final: {
+          CP: num(weights.final?.CP),
+          EA: num(weights.final?.EA),
+          MPT: num(weights.final?.MPT),
+          CPT: num(weights.final?.CPT),
+        },
+      };
+    }
+    try {
+      await req.section.save();
+    } catch (e) {
+      if (e.code === 11000)
+        return res.status(409).json({ error: `${req.section.code} already exists for ${req.section.term} ${req.section.academicYear}.` });
+      throw e;
+    }
+    res.json(await sectionDetail(req.section));
+  })
+);
+
+faculty.post(
+  '/sections/:id/items',
+  ownSection,
+  wrap(async (req, res) => {
+    const { component, period, label, max } = req.body || {};
+    if (!COMPONENTS.includes(component)) return res.status(400).json({ error: 'Invalid component' });
+    if (!label || !(Number(max) > 0)) return res.status(400).json({ error: 'A label and a max score are required.' });
+    req.section.items.push({ component, period: period === 'POST' ? 'POST' : 'MID', label, max: Number(max) });
+    await req.section.save();
+    res.json(await sectionDetail(req.section));
+  })
+);
+
+faculty.delete(
+  '/sections/:id/items/:itemId',
+  ownSection,
+  wrap(async (req, res) => {
+    const item = req.section.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ error: 'Not found' });
+    item.deleteOne();
+    await req.section.save();
+    audit(req.user, 'item.delete', sectionLabel(req.section), `${item.component} ${item.label} (/${item.max}) and its scores`);
+    await Enrollment.updateMany(
+      { section: req.section._id },
+      { $unset: { [`scores.${req.params.itemId}`]: '' } }
+    );
+    res.json(await sectionDetail(req.section));
+  })
+);
+
+// Set one score cell (or bonus). Body: { studentId, itemId | 'bonus', score | null }
+faculty.put(
+  '/sections/:id/scores',
+  ownSection,
+  wrap(async (req, res) => {
+    const { studentId, itemId, score } = req.body || {};
+    const enrollment = await Enrollment.findOne({ section: req.section._id, student: studentId });
+    if (!enrollment) return res.status(404).json({ error: 'Student not in section' });
+
+    const value = score === null || score === '' ? null : Number(score);
+    if (value !== null && !Number.isFinite(value)) return res.status(400).json({ error: 'Invalid score' });
+
+    if (itemId === 'bonus') {
+      enrollment.bonus = value ?? 0;
+    } else {
+      const item = req.section.items.id(itemId);
+      if (!item) return res.status(404).json({ error: 'Item not found' });
+      if (value !== null && (value < 0 || value > item.max))
+        return res.status(400).json({ error: `Score must be between 0 and ${item.max}` });
+      if (value === null) enrollment.scores.delete(String(itemId));
+      else enrollment.scores.set(String(itemId), value);
+    }
+    await enrollment.save();
+    res.json({ grades: computeGrades(req.section, enrollment) });
+  })
+);
+
+faculty.post(
+  '/sections/:id/students/:studentId/reset-password',
+  ownSection,
+  wrap(async (req, res) => {
+    const enrolled = await Enrollment.exists({ section: req.section._id, student: req.params.studentId });
+    if (!enrolled) return res.status(404).json({ error: 'Student not in section' });
+    const user = await User.findOne({ student: req.params.studentId, role: 'student' });
+    if (!user) return res.status(404).json({ error: 'No account' });
+    const pw = tempPassword();
+    user.passwordHash = await hashPassword(pw);
+    user.mustChangePassword = true;
+    await user.save();
+    audit(req.user, 'student.reset-password', `${user.name} (${user.username})`, sectionLabel(req.section));
+    res.json({ username: user.username, tempPassword: pw });
+  })
+);
+
+const str = (v, max = 120) => String(v ?? '').trim().slice(0, max);
+const STUDENT_NO = /^\d{4}-\d{4,7}$/;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+// Section details from a form. partial: only the fields present are returned (for edits).
+function sectionFields(b, partial) {
+  const data = {};
+  const has = (k) => !partial || b[k] !== undefined;
+  if (has('code')) data.code = str(b.code, 20).toUpperCase().replace(/\s+/g, '');
+  if (has('subjectCode')) data.subjectCode = str(b.subjectCode, 30).toUpperCase();
+  if (has('subjectTitle')) data.subjectTitle = str(b.subjectTitle).toUpperCase();
+  if (has('units')) data.units = Number(b.units) || undefined;
+  if (has('term')) data.term = str(b.term, 30);
+  if (has('academicYear')) data.academicYear = str(b.academicYear, 20);
+  if (b.schedule !== undefined) {
+    const { rows, error } = cleanSchedule(b.schedule);
+    if (error) return { error };
+    data.schedule = rows;
+    Object.assign(data, legacyFields(rows));
+  } else if (!partial) {
+    // Older clients send one-line day/time/room.
+    Object.assign(data, { day: str(b.day, 40).toUpperCase(), time: str(b.time, 60), room: str(b.room, 30) });
+  }
+  return { data };
+}
+
+faculty.post(
+  '/sections',
+  wrap(async (req, res) => {
+    const b = req.body || {};
+    const { data, error } = sectionFields(b, false);
+    if (error) return res.status(400).json({ error });
+    data.faculty = req.user._id;
+    if (!data.code) return res.status(400).json({ error: 'Section code is required.' });
+    if (b.copyFrom && mongoose.isValidObjectId(b.copyFrom)) {
+      const src = await Section.findOne({ _id: b.copyFrom, faculty: req.user._id });
+      if (src) {
+        const o = src.toObject();
+        data.weights = o.weights;
+        data.items = o.items.map(({ component, period, label, max }) => ({ component, period, label, max }));
+      }
+    }
+    try {
+      const section = await Section.create(data);
+      audit(req.user, 'section.create', sectionLabel(section));
+      res.status(201).json(await sectionDetail(section));
+    } catch (e) {
+      if (e.code === 11000)
+        return res.status(409).json({ error: `${data.code} already exists for ${data.term} ${data.academicYear}.` });
+      throw e;
+    }
+  })
+);
+
+// Enroll a class list. Creates student accounts (temp password) for new student numbers.
+faculty.post(
+  '/sections/:id/students',
+  ownSection,
+  wrap(async (req, res) => {
+    const list = Array.isArray(req.body?.students) ? req.body.students : [];
+    if (!list.length) return res.status(400).json({ error: 'No students to enroll.' });
+    if (list.length > 500) return res.status(400).json({ error: 'Too many students (max 500).' });
+
+    const result = { added: 0, already: 0, skipped: [], credentials: [] };
+    for (const s of list) {
+      const studentNo = str(s.studentNo, 20);
+      const name = str(s.name).toUpperCase();
+      const course = str(s.course, 40).toUpperCase();
+      const email = str(s.email, 100).toLowerCase();
+      if (!STUDENT_NO.test(studentNo) || !name) {
+        result.skipped.push(studentNo || name || '(blank)');
+        continue;
+      }
+      // Existing students keep their stored name/course; an email from the latest list is saved.
+      const student = await Student.findOneAndUpdate(
+        { studentNo },
+        { $setOnInsert: { name, course }, ...(EMAIL.test(email) && { $set: { email } }) },
+        { upsert: true, new: true }
+      );
+      if (EMAIL.test(email)) result.emails = (result.emails || 0) + 1;
+      if (!(await User.exists({ student: student._id }))) {
+        if (await User.exists({ username: studentNo })) {
+          result.skipped.push(studentNo);
+          continue;
+        }
+        const pw = tempPassword();
+        await User.create({
+          username: studentNo,
+          passwordHash: await hashPassword(pw),
+          role: 'student',
+          name: student.name,
+          student: student._id,
+        });
+        result.credentials.push({ studentNo, name: student.name, tempPassword: pw });
+      }
+      const r = await Enrollment.updateOne(
+        { section: req.section._id, student: student._id },
+        { $setOnInsert: { bonus: 0 } },
+        { upsert: true }
+      );
+      if (r.upsertedCount) result.added++;
+      else result.already++;
+    }
+    if (result.credentials.length) saveCredentials(req.section.code, result.credentials);
+    if (result.added)
+      audit(req.user, 'section.enroll', sectionLabel(req.section), `${result.added} students enrolled, ${result.credentials.length} new accounts`);
+    res.json({ ...(await sectionDetail(req.section)), result });
+  })
+);
+
+// Delete a whole section: its items, scores and enrollments. Student accounts are kept
+// (they may be enrolled in other sections).
+faculty.delete(
+  '/sections/:id',
+  ownSection,
+  wrap(async (req, res) => {
+    const { deletedCount } = await Enrollment.deleteMany({ section: req.section._id });
+    await req.section.deleteOne();
+    audit(req.user, 'section.delete', sectionLabel(req.section), `${deletedCount} enrollments and ${req.section.items.length} items removed`);
+    res.json({ ok: true, removedEnrollments: deletedCount });
+  })
+);
+
+// Remove a student from this section only (account and other sections are kept).
+faculty.delete(
+  '/sections/:id/students/:studentId',
+  ownSection,
+  wrap(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.studentId)) return res.status(404).json({ error: 'Not found' });
+    const enrollment = await Enrollment.findOneAndDelete({ section: req.section._id, student: req.params.studentId }).populate('student');
+    if (enrollment)
+      audit(req.user, 'student.remove', `${enrollment.student?.name} (${enrollment.student?.studentNo})`, sectionLabel(req.section));
+    res.json(await sectionDetail(req.section));
+  })
+);
+
+router.use('/faculty', faculty);
+router.use('/admin', admin);
+
+// ---------- helpers ----------
+
+const sectionLabel = (s) => [s.code, s.term, s.academicYear].filter(Boolean).join(' · ');
+
+function sectionSummary(s) {
+  return {
+    id: s._id,
+    code: s.code,
+    subjectCode: s.subjectCode,
+    subjectTitle: s.subjectTitle,
+    schedule: s.schedule?.length ? s.schedule.map(({ day, start, end, room }) => ({ day, start, end, room })) : [],
+    day: s.day,
+    time: s.time,
+    room: s.room,
+    units: s.units,
+    term: s.term,
+    academicYear: s.academicYear,
+  };
+}
+
+function itemDto(i) {
+  return { id: i._id, component: i.component, period: i.period, label: i.label, max: i.max };
+}
+
+async function sectionDetail(section) {
+  const enrollments = await Enrollment.find({ section: section._id }).populate('student');
+  const rows = enrollments
+    .map((e) => ({
+      student: { id: e.student._id, studentNo: e.student.studentNo, name: e.student.name, course: e.student.course, email: e.student.email },
+      scores: Object.fromEntries(e.scores),
+      bonus: e.bonus,
+      grades: computeGrades(section, e),
+    }))
+    .sort((a, b) => a.student.name.localeCompare(b.student.name));
+  return {
+    section: { ...sectionSummary(section), published: section.published, weights: section.weights },
+    items: section.items.map(itemDto),
+    rows,
+  };
+}
+
+export default router;
