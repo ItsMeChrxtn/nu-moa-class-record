@@ -93,7 +93,7 @@ For production: `npm run build`, then `npm start`. The server (port 5000) also s
 - Each component = total score ÷ total max of its items. Missing scores count as 0.
 - Equivalence: ≥95.5 = 4.0, ≥89.5 = 3.5, ≥83.5 = 3.0, ≥77.5 = 2.5, ≥71.5 = 2.0, ≥65.5 = 1.5, ≥59.5 = 1.0, lower = R. Pass/Repeat for "The Nationalian" subjects.
 - Percentages can be changed per section (**Percentage** button).
-- The equivalence above is the NU default. Each section can have its own table (**Percentage** → Grade point equivalence, up to 7 grades plus R). Type a **Passing grade** (e.g. 75) and press **Spread grades** to space the ranges evenly from it up to 100, then fine-tune any row. The app's grades and the exported class record's Grade Point Equivalence Table both follow it; **Reset to NU default** brings the default back.
+- The equivalence above is the NU default. Each section can have its own table (**Percentage** → Grade point equivalence, up to 7 grades plus R). The lowest row is the passing grade (e.g. start it at 75 for 75%). The same table can also be changed in the exported Excel sheet (cells AM3:AR6); that sheet's grades recalculate from it. The app's grades and the exported class record's Grade Point Equivalence Table both follow it; **Reset to NU default** brings the default back.
 
 Verified against the Excel file: Midterm/Final % and equivalents match for all 133 students.
 
