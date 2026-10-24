@@ -336,6 +336,8 @@ faculty.post(
         { upsert: true, new: true }
       );
       if (EMAIL.test(email)) result.emails = (result.emails || 0) + 1;
+      // A student imported earlier without a course gets it from this list (an existing course is kept).
+      if (course && !student.course) await Student.updateOne({ _id: student._id }, { $set: { course } });
       // Accounts are created (and emailed) from the section's "Student accounts" button.
       const r = await Enrollment.updateOne(
         { section: req.section._id, student: student._id },
