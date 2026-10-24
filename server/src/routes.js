@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
 import { User, Student, Section, Enrollment, audit } from './models.js';
-import { COMPONENTS, MARKS, attendanceItems, computeGrades } from './grading.js';
+import { COMPONENTS, MARKS, attendanceItems, cleanScale, computeGrades, scaleOf } from './grading.js';
 import { saveCredentials } from './credentials.js';
 import { cleanSchedule, legacyFields } from './schedule.js';
 import { mailConfigured, sendStudentCredentials } from './mailer.js';
@@ -137,7 +137,17 @@ faculty.patch(
   '/sections/:id',
   ownSection,
   wrap(async (req, res) => {
-    const { published, weights, details } = req.body || {};
+    const { published, weights, details, gradeScale } = req.body || {};
+    // null resets to the NU default; an array sets this section's own scale.
+    if (gradeScale !== undefined) {
+      if (gradeScale === null) req.section.gradeScale = [];
+      else {
+        const { rows, error } = cleanScale(gradeScale);
+        if (error) return res.status(400).json({ error });
+        req.section.gradeScale = rows;
+      }
+      audit(req.user, 'section.grade-scale', sectionLabel(req.section), gradeScale === null ? 'reset to NU default' : req.section.gradeScale.map((r) => `${r.eq} ≥ ${r.min}`).join(', '));
+    }
     if (details) {
       const { data, error } = sectionFields(details, true);
       if (error) return res.status(400).json({ error });
@@ -295,6 +305,7 @@ faculty.post(
       if (src) {
         const o = src.toObject();
         data.weights = o.weights;
+        data.gradeScale = o.gradeScale || [];
         data.items = o.items.map(({ component, period, label, max }) => ({ component, period, label, max }));
       }
     }
@@ -676,7 +687,14 @@ async function sectionDetail(section) {
         .map(({ period, n }) => attItemDto({ _id: `att-${period}`, component: att.component, period, label: 'Attendance', max: n, sessions: n }))
     : [];
   return {
-    section: { ...sectionSummary(section), published: section.published, weights: section.weights, attendance: attendanceDto(section) },
+    section: {
+      ...sectionSummary(section),
+      published: section.published,
+      weights: section.weights,
+      attendance: attendanceDto(section),
+      gradeScale: scaleOf(section),
+      gradeScaleCustom: Boolean(section.gradeScale?.length),
+    },
     items: [...section.items.map(itemDto), ...attColumns],
     rows,
   };

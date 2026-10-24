@@ -7,22 +7,48 @@ export const DEFAULT_WEIGHTS = {
   final: { CP: 30, EA: 30, MPT: 20, CPT: 20 },
 };
 
-// VLOOKUP approximate match: largest threshold <= percentage.
-const EQUIVALENCE = [
-  [95.5, '4.0'],
-  [89.5, '3.5'],
-  [83.5, '3.0'],
-  [77.5, '2.5'],
-  [71.5, '2.0'],
-  [65.5, '1.5'],
-  [59.5, '1.0'],
+// Grade point equivalence (VLOOKUP approximate match: largest threshold <= percentage).
+// Thresholds are half a point below the printed range, so 95.5 counts as "96 - 100".
+// A section can have its own scale (section.gradeScale); this is the NU default.
+export const DEFAULT_SCALE = [
+  { min: 95.5, eq: '4.0' },
+  { min: 89.5, eq: '3.5' },
+  { min: 83.5, eq: '3.0' },
+  { min: 77.5, eq: '2.5' },
+  { min: 71.5, eq: '2.0' },
+  { min: 65.5, eq: '1.5' },
+  { min: 59.5, eq: '1.0' },
 ];
+export const FAIL_EQ = 'R';
+export const MAX_SCALE_ROWS = 7; // what the class record's equivalence table can show
 
-export function equivalent(pct, passFail = false) {
+export const scaleOf = (section) =>
+  (section?.gradeScale?.length ? section.gradeScale.map(({ min, eq }) => ({ min, eq })) : DEFAULT_SCALE).sort((a, b) => b.min - a.min);
+
+export function equivalent(pct, passFail = false, scale = DEFAULT_SCALE) {
   if (pct == null || Number.isNaN(pct)) return null;
-  if (passFail) return pct > 59.5 ? 'Pass' : 'Repeat';
-  for (const [min, eq] of EQUIVALENCE) if (pct >= min) return eq;
-  return 'R';
+  const lowest = scale.length ? Math.min(...scale.map((s) => s.min)) : 59.5;
+  if (passFail) return pct > lowest ? 'Pass' : 'Repeat';
+  for (const { min, eq } of scale) if (pct >= min) return eq;
+  return FAIL_EQ;
+}
+
+// Validates a scale from the client: 1–7 rows, thresholds 1–100 and different, short labels.
+export function cleanScale(rows) {
+  if (!Array.isArray(rows) || !rows.length) return { error: 'Add at least one grade.' };
+  if (rows.length > MAX_SCALE_ROWS) return { error: `At most ${MAX_SCALE_ROWS} grades (the class record table has ${MAX_SCALE_ROWS} rows plus R).` };
+  const out = [];
+  for (const r of rows) {
+    const min = Number(r?.min);
+    const eq = String(r?.eq ?? '').trim().slice(0, 6);
+    if (!(min > 0 && min <= 100)) return { error: 'Each grade needs a starting percentage between 1 and 100.' };
+    if (!eq) return { error: 'Each grade needs an equivalent (e.g. 4.0).' };
+    if (eq.toUpperCase() === FAIL_EQ) return { error: `"${FAIL_EQ}" is used for grades below the lowest range.` };
+    out.push({ min: Math.round(min * 100) / 100, eq });
+  }
+  out.sort((a, b) => b.min - a.min);
+  if (new Set(out.map((r) => r.min)).size !== out.length) return { error: 'Two grades start at the same percentage.' };
+  return { rows: out };
 }
 
 function scoreOf(scores, itemId) {
@@ -88,9 +114,10 @@ export function computeGrades(section, enrollment) {
     (enrollment.bonus || 0);
 
   const passFail = /the nationalian/i.test(section.subjectTitle || '');
+  const scale = scaleOf(section);
   return {
-    midterm: { percent: round2(midterm), equivalent: equivalent(midterm, passFail) },
-    final: { percent: round2(final), equivalent: equivalent(final, passFail) },
+    midterm: { percent: round2(midterm), equivalent: equivalent(midterm, passFail, scale) },
+    final: { percent: round2(final), equivalent: equivalent(final, passFail, scale) },
   };
 }
 

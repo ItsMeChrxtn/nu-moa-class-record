@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { Section, Enrollment } from './models.js';
-import { attendanceItems } from './grading.js';
+import { FAIL_EQ, attendanceItems, scaleOf } from './grading.js';
 import { to12 } from './schedule.js';
 
 export const TEMPLATE_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates/class-record-template.xlsx');
@@ -298,6 +298,27 @@ export async function buildClassRecord(faculty, templatePath = TEMPLATE_PATH, fi
     ws.set('AJ4', null);
     [['AG', 'CP'], ['AH', 'EA'], ['AI', 'MPT'], ['AJ', 'CPT']].forEach(([c, key]) => ws.set(`${c}5`, w.final?.[key] ?? 0));
 
+    // Grade Point Equivalence Table (AM3:AR6): the section's own scale, printed like the template
+    // ("96 - 100 | 4.0" …, "59 and Below | R"). The formulas read a numeric copy in hidden AV:AW
+    // through this sheet's own Grade_table name.
+    const scale = scaleOf(sec); // high to low
+    const from = (min) => Math.ceil(min); // 95.5 -> 96
+    const eqValue = (eq) => (/^\d+(\.\d)?$/.test(eq) && Number(eq).toFixed(1) === eq ? Number(eq) : eq);
+    const slots = [['AM', 'AO', 3], ['AM', 'AO', 4], ['AM', 'AO', 5], ['AM', 'AO', 6], ['AP', 'AR', 3], ['AP', 'AR', 4], ['AP', 'AR', 5]];
+    slots.forEach(([rc, ec, r], i) => {
+      const row = scale[i];
+      ws.set(`${rc}${r}`, row ? `${from(row.min)} - ${i === 0 ? 100 : from(scale[i - 1].min) - 1}` : null);
+      ws.set(`${ec}${r}`, row ? eqValue(row.eq) : null);
+    });
+    ws.set('AP6', `${from(scale.at(-1).min) - 1} and Below`);
+    ws.set('AR6', FAIL_EQ);
+    const lookup = [{ min: 0, eq: FAIL_EQ }, ...[...scale].reverse()];
+    lookup.forEach((row, i) => {
+      ws.set(`AV${3 + i}`, row.min);
+      ws.set(`AW${3 + i}`, String(row.eq)); // text, like the Cover Page table, so the grade shows "4.0" not "4"
+    });
+    const gradeTableName = `<definedName name="Grade_table" localSheetId="${templateIndex + 1 + k}">${quoted}$AV$3:$AW$${2 + lookup.length}</definedName>`;
+
     // Item names and max scores: clear every slot, then fill the used ones.
     for (const c of Object.values(SLOTS).flat()) {
       ws.set(`${c}11`, null);
@@ -340,7 +361,8 @@ export async function buildClassRecord(faculty, templatePath = TEMPLATE_PATH, fi
 
     // Parts: worksheet, its relationships, and copies of its drawing / comments / printer settings.
     const sheetPath = `xl/worksheets/sheet${sheetN++}.xml`;
-    zip.file(sheetPath, ws.toString());
+    // Hide AV:AW (the lookup copy of the equivalence table); the template defines columns up to AT.
+    zip.file(sheetPath, ws.toString().replace('</cols>', '<col min="48" max="49" width="8" hidden="1" customWidth="1"/></cols>'));
     let rels = templateRels;
     for (const m of [...templateRels.matchAll(/Target="\.\.\/([^"]+)"/g)]) {
       const copied = await copyPart(`xl/${m[1]}`);
@@ -355,6 +377,7 @@ export async function buildClassRecord(faculty, templatePath = TEMPLATE_PATH, fi
     const index = templateIndex + 1 + k;
     for (const def of templateNames)
       newNames.push(def.replace(/localSheetId="\d+"/, `localSheetId="${index}"`).replace(/>TEMPLATE!/, `>${quoted}`).replace(/>'TEMPLATE'!/, `>${quoted}`));
+    newNames.push(gradeTableName);
   }
   zip.file(refs.path, refSheet.toString());
 

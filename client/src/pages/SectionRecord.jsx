@@ -42,7 +42,9 @@ export default function SectionRecord() {
     const rows = data.rows;
     const avg = (k) => (rows.length ? rows.reduce((s, r) => s + (r.grades[k].percent || 0), 0) / rows.length : null);
     const pf = rows.some((r) => PASS_SCALE.includes(r.grades.final.equivalent));
-    const dist = (pf ? PASS_SCALE : SCALE).map((eq) => ({ eq, n: rows.filter((r) => r.grades.final.equivalent === eq).length }));
+    // The section's own equivalence table decides the bars (e.g. 4.0 … 1.0, R).
+    const scale = data.section.gradeScale?.length ? [...data.section.gradeScale.map((s) => s.eq), 'R'] : SCALE;
+    const dist = (pf ? PASS_SCALE : scale).map((eq) => ({ eq, n: rows.filter((r) => r.grades.final.equivalent === eq).length }));
     const passing = rows.filter((r) => !isFail(r.grades.final.equivalent)).length;
     return { mid: avg('midterm'), fin: avg('final'), dist, passing };
   }, [data]);
@@ -58,7 +60,7 @@ export default function SectionRecord() {
     try {
       setData(await api(`/faculty/sections/${id}`, { method: 'PATCH', body }));
       if ('published' in body) toast(body.published ? 'Grades are now visible to students' : 'Grades are hidden from students');
-      else toast('Grade percentages saved');
+      else toast('gradeScale' in body ? 'Percentages and grade scale saved' : 'Grade percentages saved');
     } catch (e) {
       toast(e.message, 'error');
       throw e;
@@ -361,7 +363,7 @@ export default function SectionRecord() {
         />
       )}
       {panel === 'weights' && (
-        <Weights weights={section.weights} onClose={closePanel} onSave={(weights) => patchSection({ weights }).then(closePanel)} />
+        <Weights weights={section.weights} scale={section.gradeScale} onClose={closePanel} onSave={(body) => patchSection(body).then(closePanel)} />
       )}
       {panel === 'details' && (
         <EditSectionModal
@@ -578,30 +580,66 @@ function AddItem({ onAdd, onClose }) {
   );
 }
 
-function Weights({ weights, onSave, onClose }) {
+// NU default grade point equivalence, shown as printed ranges ("96 - 100 → 4.0").
+const DEFAULT_SCALE_ROWS = [
+  { from: 96, eq: '4.0' },
+  { from: 90, eq: '3.5' },
+  { from: 84, eq: '3.0' },
+  { from: 78, eq: '2.5' },
+  { from: 72, eq: '2.0' },
+  { from: 66, eq: '1.5' },
+  { from: 60, eq: '1.0' },
+];
+const MAX_SCALE_ROWS = 7; // the class record's equivalence table has 7 rows plus R
+const sameScale = (a, b) => a.length === b.length && a.every((r, i) => Number(r.from) === b[i].from && r.eq.trim() === b[i].eq);
+
+function Weights({ weights, scale, onSave, onClose }) {
   const [w, setW] = useState(structuredClone(weights));
+  // Stored thresholds are half a point below the printed start (95.5 -> "96").
+  const [rows, setRows] = useState(() => (scale?.length ? scale : []).map((r) => ({ from: Math.ceil(r.min), eq: r.eq })));
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const set = (period, k) => (e) => setW({ ...w, [period]: { ...w[period], [k]: e.target.value } });
   const total = (p) => Object.values(w[p]).reduce((s, v) => s + (Number(v) || 0), 0);
+  const setRow = (i, k, v) => setRows(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+
+  // Ranges must go down: each row starts below the one above it.
+  const scaleError = (() => {
+    if (!rows.length) return 'Add at least one grade.';
+    for (const [i, r] of rows.entries()) {
+      const f = Number(r.from);
+      if (!(f >= 1 && f <= 100) || !Number.isInteger(f)) return `Row ${i + 1}: the range must start at a whole number from 1 to 100.`;
+      if (!r.eq.trim()) return `Row ${i + 1}: enter the equivalent (e.g. 4.0).`;
+      if (r.eq.trim().toUpperCase() === 'R') return '"R" is used for grades below the lowest range.';
+      if (i && f >= Number(rows[i - 1].from)) return `Row ${i + 1} must start below row ${i}.`;
+    }
+    return '';
+  })();
+
+  async function save() {
+    if (scaleError) return setError(scaleError);
+    setBusy(true);
+    setError('');
+    const gradeScale = sameScale(rows, DEFAULT_SCALE_ROWS) ? null : rows.map((r) => ({ min: Number(r.from) - 0.5, eq: r.eq.trim() }));
+    try {
+      await onSave({ weights: w, gradeScale });
+    } catch (e) {
+      setError(e.message);
+      setBusy(false);
+    }
+  }
 
   return (
     <Modal
-      title="Percentage allocation"
-      subtitle="Each grade must add up to 100%."
+      title="Percentage & grade scale"
+      subtitle="Each grade must add up to 100%. The equivalence table turns percentages into grade points for this section."
       icon="sliders"
       onClose={onClose}
-      width={580}
+      width={620}
       footer={
         <>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button
-            className="btn primary"
-            disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              onSave(w).catch(() => setBusy(false));
-            }}
-          >
+          <button className="btn primary" disabled={busy} onClick={save}>
             {busy ? 'Saving…' : 'Save'}
           </button>
         </>
@@ -636,6 +674,54 @@ function Weights({ weights, onSave, onClose }) {
             </div>
           );
         })}
+
+        <div className="weight-block scale-block">
+          <div className="weight-block-head">
+            <strong>Grade Point Equivalence</strong>
+            <button type="button" className="link-btn reset-link" onClick={() => setRows(DEFAULT_SCALE_ROWS.map((r) => ({ ...r })))} disabled={sameScale(rows, DEFAULT_SCALE_ROWS)}>
+              Reset to NU default
+            </button>
+          </div>
+          <div className="scale-head" aria-hidden="true">
+            <span>Range (%)</span>
+            <span>Equivalent</span>
+            <span />
+          </div>
+          {rows.map((r, i) => {
+            const to = i === 0 ? 100 : Number(rows[i - 1].from) - 1;
+            return (
+              <div key={i} className="scale-row">
+                <span className="scale-range">
+                  <input type="number" min="1" max="100" value={r.from} onChange={(e) => setRow(i, 'from', e.target.value)} aria-label={`Row ${i + 1} starts at`} />
+                  <span className="scale-to">– {Number.isFinite(to) ? to : '?'}</span>
+                </span>
+                <input className="scale-eq" value={r.eq} maxLength={6} onChange={(e) => setRow(i, 'eq', e.target.value)} aria-label={`Row ${i + 1} equivalent`} />
+                <button type="button" className="icon-btn danger" title="Remove this grade" disabled={rows.length === 1} onClick={() => setRows(rows.filter((_, j) => j !== i))}>
+                  <Icon name="x" size={14} />
+                </button>
+              </div>
+            );
+          })}
+          <div className="scale-row scale-fail">
+            <span className="scale-range"><span className="scale-to">{Number(rows.at(-1)?.from) - 1 || 0} and below</span></span>
+            <span className="scale-eq-fixed">R</span>
+            <span />
+          </div>
+          {rows.length < MAX_SCALE_ROWS && (
+            <button
+              type="button"
+              className="link-add"
+              onClick={() => {
+                const last = Number(rows.at(-1)?.from) || 66;
+                setRows([...rows, { from: Math.max(1, last - 6), eq: '' }]);
+              }}
+            >
+              <Icon name="plus" size={14} /> Add a grade
+            </button>
+          )}
+          <p className="scale-note">A percentage is rounded first: 95.5 counts as 96. Up to {MAX_SCALE_ROWS} grades, which is what the class record table holds.</p>
+        </div>
+        {(error || scaleError) && <div className="alert error"><Icon name="alert" />{error || scaleError}</div>}
       </div>
     </Modal>
   );

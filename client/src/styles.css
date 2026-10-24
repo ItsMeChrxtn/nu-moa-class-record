@@ -729,3 +729,15 @@ button.mark:active { transform: scale(0.92); }
 .term-group .section-title-row h2 { font-size: 1.15rem; }
 .btn.card-export { height: 30px; padding: 0 10px; font-size: 0.76rem; box-shadow: 2px 2px 0 var(--ink); }
 .section-foot .card-tools { gap: 8px; }
+.scale-block { gap: 8px; }
+.scale-head, .scale-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 30px; gap: 8px; align-items: center; }
+.scale-head span { font-family: var(--mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.scale-range { display: flex; align-items: center; gap: 8px; }
+.scale-range input { width: 80px; height: 38px; text-align: right; font-family: var(--mono); font-weight: 700; }
+.scale-to { font-family: var(--mono); font-size: 0.85rem; color: var(--ink-2); }
+.scale-eq { height: 38px; text-align: center; font-family: var(--mono); font-weight: 700; }
+.scale-eq-fixed { display: grid; place-items: center; height: 38px; border-radius: 10px; background: var(--red-soft); color: var(--red-ink); font-family: var(--mono); font-weight: 700; }
+.scale-fail .scale-to { color: var(--red-ink); }
+.scale-note { font-size: 0.78rem; color: var(--ink-3); }
+.reset-link { color: var(--blue); }
+.reset-link:disabled { color: var(--ink-3); text-decoration: none; cursor: default; }

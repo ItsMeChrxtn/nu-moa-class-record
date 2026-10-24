@@ -71,6 +71,8 @@ const sectionSchema = new Schema(
       final: { CP: Number, EA: Number, MPT: Number, CPT: Number },
     },
     items: [itemSchema],
+    // Custom grade point equivalence ({ min: 95.5, eq: '4.0' }, …); empty = NU default.
+    gradeScale: [new Schema({ min: Number, eq: String }, { _id: false })],
     // Attendance: each period's sessions count as one item inside CP or EA (or are not graded).
     attendance: {
       component: { type: String, enum: ['CP', 'EA', ''], default: '' },
