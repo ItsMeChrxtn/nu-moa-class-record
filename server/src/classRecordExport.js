@@ -150,12 +150,18 @@ function scoreFor(column, enrollment, attScores) {
   return any ? Math.round(total * 100) / 100 : null;
 }
 
+// One section: "GRADING SHEET DEL ROSARIO ACT262 T2 AY26-27.xlsx"; several: "GRADING SHEET DEL ROSARIO T2 AY26-27.xlsx".
 export function gradingFileName(faculty, sections) {
+  if (sections.length === 1) return baseFileName(faculty, sections).replace(/^GRADING SHEET (.+?) (T\d|\d{4}-\d{2}-\d{2}|\S+ AY)/, `GRADING SHEET $1 ${sections[0].code} $2`);
+  return baseFileName(faculty, sections);
+}
+
+function baseFileName(faculty, sections) {
   const last = (faculty.name.includes(',') ? faculty.name.split(',')[0] : faculty.name.split(/\s+/).slice(-2).join(' ')).trim().toUpperCase();
   const terms = [...new Set(sections.map((s) => `${s.term}|${s.academicYear}`))];
   let suffix = new Date().toISOString().slice(0, 10);
-  if (terms.length === 1) {
-    const [term, ay] = terms[0].split('|');
+  const [term, ay] = terms.length === 1 ? terms[0].split('|') : [];
+  if (term || ay) {
     const t = { first: 'T1', second: 'T2', third: 'T3' }[String(term).toLowerCase().split(/\s+/)[0]] || term;
     const y = String(ay).match(/(\d{2})(\d{2})\s*-\s*\d{2}(\d{2})/);
     suffix = `${t} AY${y ? `${y[2]}-${y[3]}` : ay}`;
@@ -179,6 +185,7 @@ export async function facultyTerms(faculty) {
 // filter: { academicYear, term } limits the file to one term, so terms are never mixed in one workbook.
 export async function buildClassRecord(faculty, templatePath = TEMPLATE_PATH, filter = {}) {
   const query = { faculty: faculty._id };
+  if (filter.sectionId) query._id = filter.sectionId; // a single section's grading sheet
   if (filter.academicYear !== undefined) query.academicYear = filter.academicYear || { $in: ['', null] };
   if (filter.term !== undefined) query.term = filter.term || { $in: ['', null] };
   const sections = await Section.find(query).sort({ code: 1 });

@@ -727,3 +727,5 @@ button.mark:active { transform: scale(0.92); }
 
 .term-group + .term-group { margin-top: 12px; }
 .term-group .section-title-row h2 { font-size: 1.15rem; }
+.btn.card-export { height: 30px; padding: 0 10px; font-size: 0.76rem; box-shadow: 2px 2px 0 var(--ink); }
+.section-foot .card-tools { gap: 8px; }

@@ -148,6 +148,9 @@ export default function SectionRecord() {
             <button className="btn" onClick={() => setPanel('details')}>
               <Icon name="edit" size={16} /> Details
             </button>
+            <a className="btn" href={`/api/faculty/export?section=${encodeURIComponent(id)}`} download title="This section's grading sheet in the class record format">
+              <Icon name="download" size={16} /> Export
+            </a>
             <button className="btn" onClick={() => setPanel('students')}>
               <Icon name="userPlus" size={16} /> Students
             </button>

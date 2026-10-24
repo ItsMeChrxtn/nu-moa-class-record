@@ -30,6 +30,13 @@ function termGroups(sections) {
     .map((g) => ({ ...g, sections: g.sections.sort((a, b) => a.code.localeCompare(b.code)) }));
 }
 
+export function downloadSection(id) {
+  const a = Object.assign(document.createElement('a'), { href: `/api/faculty/export?section=${encodeURIComponent(id)}`, download: '' });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 function SectionCard({ s, onDelete }) {
   return (
     <Link to={`/faculty/sections/${s.id}`} className="section-card">
@@ -73,7 +80,21 @@ function SectionCard({ s, onDelete }) {
           <span className="foot-stat"><Icon name="users" size={15} /><strong>{s.studentCount}</strong> students</span>
           <span className="foot-stat"><Icon name="list" size={15} /><strong>{s.itemCount}</strong> items</span>
         </div>
-        <Icon name="chevronRight" className="go" />
+        <span className="card-tools">
+          <button
+            className="btn card-export"
+            title={`Export the ${s.code} grading sheet (Excel)`}
+            onClick={(e) => {
+              // The card itself is a link, so start the download without following it.
+              e.preventDefault();
+              e.stopPropagation();
+              downloadSection(s.id);
+            }}
+          >
+            <Icon name="download" size={14} /> Excel
+          </button>
+          <Icon name="chevronRight" className="go" />
+        </span>
       </div>
     </Link>
   );

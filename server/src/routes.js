@@ -481,11 +481,17 @@ faculty.delete(
 faculty.get(
   '/export',
   wrap(async (req, res) => {
-    // ?academicYear=…&term=… exports one term; without them, the latest term is exported.
-    let filter = { academicYear: req.query.academicYear, term: req.query.term };
-    if (filter.academicYear === undefined && filter.term === undefined) filter = (await facultyTerms(req.user))[0] || {};
-    const { buffer, sections } = await buildClassRecord(req.user, undefined, { academicYear: String(filter.academicYear ?? ''), term: String(filter.term ?? '') });
-    if (!sections.length) return res.status(404).json({ error: 'No sections for that term.' });
+    // ?section=<id> exports one section; ?academicYear=…&term=… one term; neither: the latest term.
+    let filter;
+    if (req.query.section) {
+      if (!mongoose.isValidObjectId(req.query.section)) return res.status(404).json({ error: 'Section not found.' });
+      filter = { sectionId: req.query.section };
+    } else {
+      const t = req.query.academicYear !== undefined || req.query.term !== undefined ? { academicYear: req.query.academicYear, term: req.query.term } : (await facultyTerms(req.user))[0] || {};
+      filter = { academicYear: String(t.academicYear ?? ''), term: String(t.term ?? '') };
+    }
+    const { buffer, sections } = await buildClassRecord(req.user, undefined, filter);
+    if (!sections.length) return res.status(404).json({ error: filter.sectionId ? 'Section not found.' : 'No sections for that term.' });
     const name = gradingFileName(req.user, sections);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`);
