@@ -24,6 +24,23 @@ export const COMPONENTS = [
 export const PERIODS = { MID: 'Midterms (Wk 1–7)', POST: 'Finals (Wk 8–13)' };
 // Which components belong to each term: MPT is a midterm task, CPT a finals task.
 export const TERM_COMPONENTS = { MID: ['CP', 'EA', 'MPT'], POST: ['CP', 'EA', 'CPT'] };
+// How a student's grade adds up, per component (same rules as the server):
+// midterm = CP/EA of Midterms + MPT; final = CP/EA of both terms + MPT + CPT + bonus.
+export function gradeBreakdown(record, term) {
+  const { items, scores, section, bonus } = record;
+  const w = (term === 'MID' ? section.weights?.midterm : section.weights?.final) || {};
+  const keys = term === 'MID' ? ['CP', 'EA', 'MPT'] : ['CP', 'EA', 'MPT', 'CPT'];
+  const rows = keys.map((c) => {
+    const list = items.filter((i) => i.component === c && (term === 'POST' || termOf(i) === 'MID'));
+    const got = list.reduce((s, i) => s + (scores[i.id] ?? 0), 0);
+    const max = list.reduce((s, i) => s + i.max, 0);
+    const weight = Number(w[c]) || 0;
+    return { key: c, got, max, weight, points: max ? (got / max) * weight : 0, bothTerms: term === 'POST' && (c === 'CP' || c === 'EA') };
+  });
+  if (term === 'POST' && bonus) rows.push({ key: 'BONUS', points: bonus });
+  return rows;
+}
+
 export const termOf = (item) => (item.component === 'MPT' ? 'MID' : item.component === 'CPT' ? 'POST' : item.period === 'POST' ? 'POST' : 'MID');
 
 // Display order: CP mid, CP post, EA mid, EA post, MPT, CPT.

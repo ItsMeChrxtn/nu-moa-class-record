@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import { api, COMPONENTS, schedule, termOf } from '../api.js';
+import { api, COMPONENTS, gradeBreakdown, schedule, termOf } from '../api.js';
 import { useAuth } from '../auth.jsx';
-import { EmptyState, ErrorState, Hero, Icon, PageLoader, Ring, eqTone, splitName, titleCase, useUI } from '../ui.jsx';
+import { EmptyState, ErrorState, Hero, Icon, PageLoader, Ring, displayName, eqTone, firstName, titleCase, useUI } from '../ui.jsx';
 import { downloadCertificate } from '../certificate.js';
 
 const NAME = Object.fromEntries(COMPONENTS.map((c) => [c.key, c.name]));
 const fmtPct = (p) => (p == null ? '—' : `${Number(p).toFixed(2)}%`);
+const TERMS = {
+  MID: { name: 'Midterms', weeks: 'Weeks 1 – 7', parts: ['CP', 'EA', 'MPT'], weights: 'midterm' },
+  POST: { name: 'Finals', weeks: 'Weeks 8 – 13', parts: ['CP', 'EA', 'CPT'], weights: 'final' },
+};
 
 export default function StudentRecords() {
   const { user } = useAuth();
@@ -27,9 +31,9 @@ export default function StudentRecords() {
   return (
     <>
       <Hero
-        eyebrow={`Grade breakdown · ${user.username}`}
-        title={<>Your <span className="accent">grades.</span></>}
-        lead="Every quiz, activity and exam behind your midterm and final grade."
+        eyebrow={`Student · ${user.username}`}
+        title={<>Hello, <span className="accent">{firstName(user.name)}.</span></>}
+        lead={records.length > 1 ? `You have ${records.length} classes with published grades. Pick one to see every score behind it.` : 'Every quiz, activity and exam behind your midterm and final grade.'}
       />
       <div className="container">
         {records.length === 0 ? (
@@ -66,50 +70,44 @@ export default function StudentRecords() {
   );
 }
 
+// One class: banner (class + both grades), then the chosen term's scores beside its summary.
 function Report({ record, user }) {
-  const { name } = user;
-  const { section, grades, scores, bonus, items } = record;
-  const w = section.weights || {};
-  const { first, last } = splitName(name);
-  const pick = (component, period) => items.filter((i) => i.component === component && termOf(i) === period);
+  const { section, grades, items } = record;
   // Finals shows up once the faculty has added finals items.
   const finalsOpen = items.some((i) => termOf(i) === 'POST');
   const [view, setView] = useState(finalsOpen ? 'POST' : 'MID');
-  const tab = finalsOpen ? view : 'MID';
-  const current = tab === 'MID' ? grades.midterm : grades.final;
-  const fail = eqTone(current.equivalent) === 'fail';
+  const term = finalsOpen ? view : 'MID';
   const sched = schedule(section).map((x) => [x.day, x.time, x.room && `Rm ${x.room}`].filter(Boolean).join(' · ')).filter(Boolean);
-  const details = [
-    ['Section', section.code],
-    ['Subject', [section.subjectCode, section.subjectTitle && titleCase(section.subjectTitle)].filter(Boolean).join(' · ')],
-    ['Term', [section.term, section.academicYear && `A.Y. ${section.academicYear}`].filter(Boolean).join(' · ')],
-    ['Schedule', sched.join('\n')],
-  ].filter(([, v]) => v);
 
   return (
     <>
-      <section className={`spotlight ${fail ? 'spotlight-muted' : ''}`}>
-        <div>
-          <p className="hello">Hello, student</p>
-          <h2>
-            {first} {last && <span>{last}</span>}
-          </h2>
-          <dl className="info-grid">
-            {details.map(([k, v]) => (
-              <div key={k}>
-                <dt>{k}</dt>
-                <dd>{v}</dd>
-              </div>
-            ))}
+      <section className="sr-banner">
+        <div className="sr-banner-main">
+          <span className="sr-kicker">{[section.code, section.subjectCode].filter(Boolean).join(' · ')}</span>
+          <h2>{titleCase(section.subjectTitle || section.code)}</h2>
+          <dl className="sr-facts">
+            <div>
+              <dt>Term</dt>
+              <dd>{[section.term, section.academicYear && `A.Y. ${section.academicYear}`].filter(Boolean).join(' · ') || '—'}</dd>
+            </div>
+            <div>
+              <dt>Faculty</dt>
+              <dd>{section.faculty ? displayName(section.faculty) : '—'}</dd>
+            </div>
+            <div className="wide">
+              <dt>Schedule</dt>
+              <dd>{sched.length ? sched.map((s) => <span key={s}>{s}</span>) : '—'}</dd>
+            </div>
           </dl>
         </div>
-        <div className="grade-pair">
-          <GradeTile label="Midterm grade" grade={grades.midterm} active={tab === 'MID'} />
+        <div className="sr-grades">
+          <GradeTile label="Midterm grade" grade={grades.midterm} active={term === 'MID'} onClick={() => setView('MID')} />
           {finalsOpen ? (
-            <GradeTile label="Final grade" grade={grades.final} active={tab === 'POST'} />
+            <GradeTile label="Final grade" grade={grades.final} active={term === 'POST'} onClick={() => setView('POST')} />
           ) : (
             <div className="grade-tile pending">
               <span className="grade-tile-label">Final grade</span>
+              <Icon name="lock" size={22} />
               <span className="pending-text">After midterms</span>
             </div>
           )}
@@ -117,140 +115,185 @@ function Report({ record, user }) {
       </section>
 
       <div className="term-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'MID'} onClick={() => setView('MID')}>
+        <button role="tab" aria-selected={term === 'MID'} onClick={() => setView('MID')}>
           Midterms <small>{fmtPct(grades.midterm.percent)}</small>
         </button>
-        {finalsOpen && (
-          <button role="tab" aria-selected={tab === 'POST'} onClick={() => setView('POST')}>
+        {finalsOpen ? (
+          <button role="tab" aria-selected={term === 'POST'} onClick={() => setView('POST')}>
             Finals <small>{fmtPct(grades.final.percent)}</small>
           </button>
+        ) : (
+          <span className="tab-hint"><Icon name="lock" size={14} /> Finals opens once your faculty adds finals items</span>
         )}
       </div>
 
-      {tab === 'MID' ? (
-        <Term
-          key="MID"
-          title="Midterms"
-          weeks="Weeks 1 – 7"
-          grade={grades.midterm}
-          groups={[
-            { key: 'CP', items: pick('CP', 'MID'), weight: w.midterm?.CP },
-            { key: 'EA', items: pick('EA', 'MID'), weight: w.midterm?.EA },
-            { key: 'MPT', items: pick('MPT', 'MID'), weight: w.midterm?.MPT },
-          ]}
-          scores={scores}
-          certificate={items.some((i) => termOf(i) === 'MID') ? () => downloadCertificate(record, user, 'MID') : null}
-          footer={<p className="note">Items without a score (—) count as 0. If a score looks off, message your instructor.</p>}
-        />
-      ) : (
-        <Term
-          key="POST"
-          title="Finals"
-          weeks="Weeks 8 – 13"
-          grade={grades.final}
-          groups={[
-            { key: 'CP', items: pick('CP', 'POST'), weight: w.final?.CP },
-            { key: 'EA', items: pick('EA', 'POST'), weight: w.final?.EA },
-            { key: 'CPT', items: pick('CPT', 'POST'), weight: w.final?.CPT },
-          ]}
-          scores={scores}
-          certificate={() => downloadCertificate(record, user, 'POST')}
-          footer={
-            <>
-              {bonus > 0 && <p className="bonus">Bonus: <strong>+{bonus}</strong> added to your final grade.</p>}
-              <p className="note">
-                Your final grade counts every CP and EA item from both terms, plus the MPT ({w.final?.MPT ?? 0}%) and CPT. Items
-                without a score (—) count as 0. If a score looks off, message your instructor.
-              </p>
-            </>
-          }
-        />
-      )}
+      <div className="sr-layout">
+        <Scores key={term} record={record} term={term} />
+        <aside className="sr-side">
+          <Computation record={record} term={term} />
+          <Certificates record={record} user={user} finalsOpen={finalsOpen} />
+          <Attendance record={record} />
+        </aside>
+      </div>
     </>
   );
 }
 
-function GradeTile({ label, grade, active }) {
+function GradeTile({ label, grade, active, onClick }) {
   return (
-    <div className={`grade-tile ${active ? 'active' : ''}`}>
+    <button type="button" className={`grade-tile ${active ? 'active' : ''}`} onClick={onClick}>
       <span className="grade-tile-label">{label}</span>
-      <Ring mini size={92} stroke={8} percent={grade.percent} eq={grade.equivalent} />
+      <Ring mini size={88} stroke={8} percent={grade.percent} eq={grade.equivalent} />
       <span className="grade-tile-pct">{fmtPct(grade.percent)}</span>
-    </div>
+    </button>
   );
 }
 
-function Term({ title, weeks, grade, groups, scores, footer, certificate }) {
-  const shown = groups.filter((g) => g.items.length);
-  const { toast } = useUI();
-  const [busy, setBusy] = useState(false);
+// Every item of the term, grouped by component, in one table-like list.
+function Scores({ record, term }) {
+  const { items, scores, section } = record;
+  const t = TERMS[term];
+  const w = section.weights?.[t.weights] || {};
+  const groups = t.parts.map((key) => ({ key, items: items.filter((i) => i.component === key && termOf(i) === term), weight: w[key] }));
+  const grade = term === 'MID' ? record.grades.midterm : record.grades.final;
+
   return (
-    <section className="term term-wide">
-      <div className="term-head">
+    <section className="sr-card sr-scores">
+      <div className="sr-card-head">
         <div>
-          <h3>{title}</h3>
-          <p className="weeks">{weeks}</p>
+          <h3>{t.name}</h3>
+          <span className="sr-sub">{t.weeks} · {t.parts.join(' · ')}</span>
         </div>
         <span className="term-grade">
           <strong>{fmtPct(grade.percent)}</strong>
           <span className={`mini-gp ${eqTone(grade.equivalent) === 'fail' ? 'fail' : ''}`}>GP {grade.equivalent ?? '—'}</span>
         </span>
       </div>
-      {certificate && (
-        <div className="cert-bar">
-          <span className="cert-icon"><Icon name="award" size={20} /></span>
-          <span className="cert-text">
-            <strong>{title === 'Midterms' ? 'Midterm' : 'Final'} grade certificate</strong>
-            <small>A PDF with your {title === 'Midterms' ? 'midterm' : 'final'} grade, grade point and how it was computed.</small>
-          </span>
-          <button
-            className="btn primary"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await certificate();
-              } catch (e) {
-                toast('The certificate could not be made. Please try again.', 'error');
-              }
-              setBusy(false);
-            }}
-          >
-            <Icon name="download" size={16} /> {busy ? 'Preparing…' : 'Download certificate'}
-          </button>
-        </div>
-      )}
-      {shown.length === 0 && <p className="note">No graded items yet.</p>}
-      <div className="group-grid">
-      {shown.map((g) => {
+
+      {groups.map((g) => {
         const got = g.items.reduce((s, i) => s + (scores[i.id] ?? 0), 0);
         const max = g.items.reduce((s, i) => s + i.max, 0);
+        const pct = max ? (got / max) * 100 : null;
         return (
-          <div key={g.key} className={`group grp-${g.key}`}>
-            <div className="group-head">
-              <span className="gdot" />
-              <h4>{NAME[g.key]}</h4>
-              {g.weight != null && <span className="group-weight">{g.weight}%</span>}
-              <span className="group-total">{got}<small> / {max}</small></span>
+          <div key={g.key} className={`sr-comp grp-${g.key}`}>
+            <div className="sr-comp-head">
+              <span className="choice-key">{g.key}</span>
+              <span className="sr-comp-name">
+                <strong>{NAME[g.key]}</strong>
+                <small>{g.items.length} item{g.items.length === 1 ? '' : 's'}{g.weight != null ? ` · ${g.weight}% of the grade` : ''}</small>
+              </span>
+              <span className="sr-comp-total">
+                <strong>{max ? `${got} / ${max}` : '—'}</strong>
+                <small>{pct == null ? 'No items yet' : `${pct.toFixed(1)}%`}</small>
+              </span>
             </div>
-            <ul>
-              {g.items.map((i) => {
-                const v = scores[i.id];
-                const ratio = v == null ? 0 : v / i.max;
-                return (
-                  <li key={i.id} className={`bar-row ${v == null ? 'missing' : ratio < 0.6 ? 'low' : ''}`}>
-                    <span className="bar-label" title={i.label}>{i.label}</span>
-                    <span className="bar"><span className="bar-fill" style={{ width: `${Math.min(1, ratio) * 100}%` }} /></span>
-                    <span className="bar-score">{v ?? '—'}<small> / {i.max}</small></span>
-                  </li>
-                );
-              })}
-            </ul>
+            {g.items.length > 0 && (
+              <ul className="sr-items">
+                {g.items.map((i) => {
+                  const v = scores[i.id];
+                  const ratio = v == null ? 0 : v / i.max;
+                  return (
+                    <li key={i.id} className={v == null ? 'missing' : ratio < 0.6 ? 'low' : ''}>
+                      <span className="sr-item-label" title={i.label}>{i.label}</span>
+                      <span className="bar"><span className="bar-fill" style={{ width: `${Math.min(1, ratio) * 100}%` }} /></span>
+                      <span className="sr-item-score">{v ?? '—'}<small> / {i.max}</small></span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         );
       })}
+      <p className="sr-foot">Items without a score (—) count as 0. If a score looks off, message your instructor.</p>
+    </section>
+  );
+}
+
+// The term's grade as a sum: each component's share of its weight.
+function Computation({ record, term }) {
+  const rows = gradeBreakdown(record, term);
+  const grade = term === 'MID' ? record.grades.midterm : record.grades.final;
+  return (
+    <section className="sr-card sr-calc">
+      <h4 className="sr-side-title"><Icon name="chart" size={16} /> How your {term === 'MID' ? 'midterm' : 'final'} grade adds up</h4>
+      <table>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key}>
+              <th>
+                {r.key === 'BONUS' ? 'Bonus' : r.key}
+                {r.bothTerms && <small> both terms</small>}
+              </th>
+              <td className="muted">{r.key === 'BONUS' ? '' : r.max ? `${r.got}/${r.max} × ${r.weight}%` : `— × ${r.weight}%`}</td>
+              <td>{r.key === 'BONUS' ? '+' : ''}{r.points.toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <th colSpan={2}>{term === 'MID' ? 'Midterm' : 'Final'} grade</th>
+            <td>{fmtPct(grade.percent)}</td>
+          </tr>
+        </tfoot>
+      </table>
+      <span className={`sr-gp ${eqTone(grade.equivalent) === 'fail' ? 'fail' : ''}`}>Grade point {grade.equivalent ?? '—'}</span>
+    </section>
+  );
+}
+
+function Certificates({ record, user, finalsOpen }) {
+  const { toast } = useUI();
+  const [busy, setBusy] = useState('');
+  const midOpen = record.items.some((i) => termOf(i) === 'MID');
+  const get = async (term) => {
+    setBusy(term);
+    try {
+      await downloadCertificate(record, user, term);
+    } catch {
+      toast('The certificate could not be made. Please try again.', 'error');
+    }
+    setBusy('');
+  };
+  const row = (term, label, open, grade) => (
+    <div className={`sr-cert-row ${open ? '' : 'locked'}`}>
+      <span className="sr-cert-seal"><Icon name={open ? 'award' : 'lock'} size={18} /></span>
+      <span className="sr-cert-text">
+        <strong>{label}</strong>
+        <small>{open ? `${fmtPct(grade.percent)} · GP ${grade.equivalent ?? '—'}` : 'Available once finals items are added'}</small>
+      </span>
+      {open && (
+        <button className="btn" disabled={!!busy} onClick={() => get(term)} aria-label={`Download the ${label.toLowerCase()}`}>
+          <Icon name="download" size={15} /> {busy === term ? '…' : 'PDF'}
+        </button>
+      )}
+    </div>
+  );
+  return (
+    <section className="sr-card sr-certs">
+      <h4 className="sr-side-title"><Icon name="award" size={16} /> Certificates</h4>
+      {row('MID', 'Midterm grade certificate', midOpen, record.grades.midterm)}
+      {row('POST', 'Final grade certificate', finalsOpen, record.grades.final)}
+    </section>
+  );
+}
+
+function Attendance({ record }) {
+  const c = record.attendance?.counts;
+  const total = c ? c.P + c.L + c.A + c.E + c.none : 0;
+  if (!total) return null;
+  const parts = [['P', 'Present', c.P], ['L', 'Late', c.L], ['A', 'Absent', c.A + c.none], ['E', 'Excused', c.E]];
+  return (
+    <section className="sr-card sr-att">
+      <h4 className="sr-side-title"><Icon name="calendar" size={16} /> Attendance · {total} session{total === 1 ? '' : 's'}</h4>
+      <div className="sr-att-bar">
+        {parts.map(([k, , n]) => n > 0 && <span key={k} className={`att-${k}`} style={{ flex: n }} />)}
       </div>
-      {footer}
+      <ul className="sr-att-legend">
+        {parts.map(([k, label, n]) => (
+          <li key={k}><i className={`att-${k}`} />{label}<strong>{n}</strong></li>
+        ))}
+      </ul>
     </section>
   );
 }

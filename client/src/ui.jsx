@@ -76,6 +76,12 @@ export function splitName(name = '') {
 // "CHRISTIAN LLOYD E. DEL ROSARIO" -> "Christian Lloyd E. Del Rosario"
 export const titleCase = (s = '') => s.toLowerCase().replace(/(^|[\s.-])(\p{L})/gu, (m, p, c) => p + c.toUpperCase());
 
+// "DEL ROSARIO, CHRISTIAN LLOYD E." -> "Christian Lloyd E. Del Rosario"
+export function displayName(name = '') {
+  const i = name.indexOf(',');
+  return titleCase(i < 0 ? name : `${name.slice(i + 1).trim()} ${name.slice(0, i).trim()}`);
+}
+
 export function firstName(name = '') {
   // Names may be "LAST, FIRST M." or "FIRST M. LAST".
   const part = name.includes(',') ? name.split(',')[1] : name;
