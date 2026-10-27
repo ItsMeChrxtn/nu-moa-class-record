@@ -14,6 +14,8 @@ const userSchema = new Schema(
     disabled: { type: Boolean, default: false }, // set by an admin; blocks sign-in
     lastLoginAt: Date,
     credentialsSentAt: Date, // when the current temporary password was emailed
+    // Faculty: weekly blocks besides classes, shown on the weekly schedule.
+    scheduleBlocks: [new Schema({ day: String, start: String, end: String, label: String }, { _id: false })],
   },
   { timestamps: true }
 );

@@ -36,3 +36,24 @@ export function legacyFields(rows) {
     room: [...new Set(rows.map((r) => r.room).filter(Boolean))].join(' / '),
   };
 }
+
+// A faculty member's own weekly blocks besides classes (consultation hours, meetings…):
+// [{ day: 'TUE', start: '08:00', end: '11:00', label: 'Admin/Consultation Hours' }]. Returns { rows } or { error }.
+export function cleanBlocks(input) {
+  if (!Array.isArray(input)) return { error: 'Send a list of blocks.' };
+  if (input.length > 40) return { error: 'At most 40 blocks.' };
+  const rows = [];
+  for (const [i, r] of input.entries()) {
+    const day = String(r?.day || '').toUpperCase();
+    const start = String(r?.start || '');
+    const end = String(r?.end || '');
+    const label = String(r?.label ?? '').trim().slice(0, 60) || 'Admin/Consultation Hours';
+    const n = `Block ${i + 1}`;
+    if (!DAYS.includes(day)) return { error: `${n}: choose a day.` };
+    if (!HHMM.test(start) || !HHMM.test(end)) return { error: `${n}: enter a start and an end time.` };
+    if (end <= start) return { error: `${n}: the end time must be after the start time.` };
+    rows.push({ day, start, end, label });
+  }
+  rows.sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || a.start.localeCompare(b.start));
+  return { rows };
+}

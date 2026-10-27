@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, meetingsOn, schedule, todayCode } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { NewSectionModal, deleteSection } from '../Roster.jsx';
+import Timetable, { sectionColors } from '../Timetable.jsx';
 import { EmptyState, ErrorState, Hero, Icon, PageLoader, Stat, TodayChip, firstName, greeting, titleCase, useUI } from '../ui.jsx';
 
 const TERM_ORDER = ['first', 'second', 'third', 'summer'];
@@ -52,7 +53,7 @@ function TermMeter({ label, items, average, state }) {
 }
 
 // Classes that meet today, earliest first, with the one in progress or up next marked.
-function TodayPanel({ sections }) {
+function TodayPanel({ sections, colors, onOpenWeek }) {
   const day = todayCode();
   const now = new Date();
   const mins = now.getHours() * 60 + now.getMinutes();
@@ -79,7 +80,7 @@ function TodayPanel({ sections }) {
             const live = toMin(c.start) != null && toMin(c.start) <= mins && mins < toMin(c.end);
             const done = toMin(c.end) != null && toMin(c.end) <= mins;
             return (
-              <li key={`${c.s.id}-${i}`} className={live ? 'live' : done ? 'done' : i === nextIdx ? 'next' : ''}>
+              <li key={`${c.s.id}-${i}`} className={`sc-${colors.get(c.s.id) ?? 0} ${live ? 'live' : done ? 'done' : i === nextIdx ? 'next' : ''}`}>
                 <Link to={`/faculty/sections/${c.s.id}`}>
                   <span className="today-time">{c.time || 'Time not set'}</span>
                   <span className="today-code">{c.s.code}</span>
@@ -92,13 +93,25 @@ function TodayPanel({ sections }) {
           })}
         </ol>
       )}
+      <button type="button" className="week-strip" onClick={onOpenWeek} title="Open the weekly schedule">
+        {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => {
+          const n = sections.reduce((a, s) => a + meetingsOn(s, d).length, 0);
+          return (
+            <span key={d} className={`week-day ${d === day ? 'is-today' : ''} ${n ? '' : 'free'}`}>
+              <small>{d}</small>
+              <strong>{n}</strong>
+            </span>
+          );
+        })}
+        <span className="week-go">Week <Icon name="chevronRight" size={14} /></span>
+      </button>
     </section>
   );
 }
 
-function SectionCard({ s, onDelete }) {
+function SectionCard({ s, color, onDelete }) {
   return (
-    <Link to={`/faculty/sections/${s.id}`} className="section-card">
+    <Link to={`/faculty/sections/${s.id}`} className={`section-card sc-${color ?? 0}`}>
       <div className="section-card-top">
         <span className="code-badge">{s.code}</span>
         <span className="card-tools">
@@ -169,11 +182,26 @@ export default function FacultyHome() {
   const [sections, setSections] = useState(null);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [blocks, setBlocks] = useState([]);
+  const [view, setView] = useState(() => {
+    try {
+      return localStorage.getItem('faculty-view') || 'sections';
+    } catch {
+      return 'sections';
+    }
+  });
+  const pick = (v) => {
+    setView(v);
+    try {
+      localStorage.setItem('faculty-view', v);
+    } catch {}
+  };
 
   useEffect(() => {
     api('/faculty/sections')
       .then((d) => setSections(d.sections))
       .catch((e) => setError(e.message));
+    api('/faculty/schedule-blocks').then((d) => setBlocks(d.blocks)).catch(() => {});
   }, []);
 
   if (error) return <ErrorState message={error} />;
@@ -186,11 +214,13 @@ export default function FacultyHome() {
   // Average of this term's section averages (midterm grade until finals start).
   const current = (latest?.sections || []).map((s) => (s.finalsItemCount ? s.finalAverage : s.midtermAverage)).filter((v) => v != null);
   const termAverage = current.length ? current.reduce((a, b) => a + b, 0) / current.length : null;
+  const colors = sectionColors(sections);
 
   const card = (s) => (
     <SectionCard
       key={s.id}
       s={s}
+      color={colors.get(s.id)}
       onDelete={async () => {
         if (await deleteSection(s, { confirm, toast }, { students: s.studentCount, items: s.itemCount }))
           setSections((list) => list.filter((x) => x.id !== s.id));
@@ -227,10 +257,23 @@ export default function FacultyHome() {
             />
             <Stat tone="ink" icon="eye" label="Published" value={<>{published}<small> / {sections.length}</small></>} sub="Visible to students" />
           </div>
-          <TodayPanel sections={latest?.sections || []} />
+          <TodayPanel sections={latest?.sections || []} colors={colors} onOpenWeek={() => pick('schedule')} />
         </div>
 
-        {sections.length === 0 ? (
+        {sections.length > 0 && (
+          <div className="view-tabs home-tabs" role="tablist">
+            <button role="tab" aria-selected={view === 'sections'} onClick={() => pick('sections')}>
+              <Icon name="layers" size={15} /> Sections
+            </button>
+            <button role="tab" aria-selected={view === 'schedule'} onClick={() => pick('schedule')}>
+              <Icon name="calendar" size={15} /> Weekly schedule
+            </button>
+          </div>
+        )}
+
+        {sections.length > 0 && view === 'schedule' ? (
+          <Timetable sections={latest?.sections || []} blocks={blocks} onBlocksChange={setBlocks} termLabel={latest?.label} />
+        ) : sections.length === 0 ? (
           <EmptyState title="No sections yet">
             Create a section and import its class list from a PDF.
             <br />

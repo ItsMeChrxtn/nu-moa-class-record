@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, COMPONENTS, schedule, termOf } from '../api.js';
 import { useAuth } from '../auth.jsx';
-import { EmptyState, ErrorState, Hero, PageLoader, Ring, eqTone, splitName, titleCase } from '../ui.jsx';
+import { EmptyState, ErrorState, Hero, Icon, PageLoader, Ring, eqTone, splitName, titleCase, useUI } from '../ui.jsx';
+import { downloadCertificate } from '../certificate.js';
 
 const NAME = Object.fromEntries(COMPONENTS.map((c) => [c.key, c.name]));
 const fmtPct = (p) => (p == null ? '—' : `${Number(p).toFixed(2)}%`);
@@ -57,7 +58,7 @@ export default function StudentRecords() {
                 })}
               </div>
             )}
-            <Report key={record.section.id} record={record} name={user.name} />
+            <Report key={record.section.id} record={record} user={user} />
           </div>
         )}
       </div>
@@ -65,7 +66,8 @@ export default function StudentRecords() {
   );
 }
 
-function Report({ record, name }) {
+function Report({ record, user }) {
+  const { name } = user;
   const { section, grades, scores, bonus, items } = record;
   const w = section.weights || {};
   const { first, last } = splitName(name);
@@ -137,6 +139,7 @@ function Report({ record, name }) {
             { key: 'MPT', items: pick('MPT', 'MID'), weight: w.midterm?.MPT },
           ]}
           scores={scores}
+          certificate={items.some((i) => termOf(i) === 'MID') ? () => downloadCertificate(record, user, 'MID') : null}
           footer={<p className="note">Items without a score (—) count as 0. If a score looks off, message your instructor.</p>}
         />
       ) : (
@@ -151,6 +154,7 @@ function Report({ record, name }) {
             { key: 'CPT', items: pick('CPT', 'POST'), weight: w.final?.CPT },
           ]}
           scores={scores}
+          certificate={() => downloadCertificate(record, user, 'POST')}
           footer={
             <>
               {bonus > 0 && <p className="bonus">Bonus: <strong>+{bonus}</strong> added to your final grade.</p>}
@@ -176,8 +180,10 @@ function GradeTile({ label, grade, active }) {
   );
 }
 
-function Term({ title, weeks, grade, groups, scores, footer }) {
+function Term({ title, weeks, grade, groups, scores, footer, certificate }) {
   const shown = groups.filter((g) => g.items.length);
+  const { toast } = useUI();
+  const [busy, setBusy] = useState(false);
   return (
     <section className="term term-wide">
       <div className="term-head">
@@ -190,6 +196,30 @@ function Term({ title, weeks, grade, groups, scores, footer }) {
           <span className={`mini-gp ${eqTone(grade.equivalent) === 'fail' ? 'fail' : ''}`}>GP {grade.equivalent ?? '—'}</span>
         </span>
       </div>
+      {certificate && (
+        <div className="cert-bar">
+          <span className="cert-icon"><Icon name="award" size={20} /></span>
+          <span className="cert-text">
+            <strong>{title === 'Midterms' ? 'Midterm' : 'Final'} grade certificate</strong>
+            <small>A PDF with your {title === 'Midterms' ? 'midterm' : 'final'} grade, grade point and how it was computed.</small>
+          </span>
+          <button
+            className="btn primary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await certificate();
+              } catch (e) {
+                toast('The certificate could not be made. Please try again.', 'error');
+              }
+              setBusy(false);
+            }}
+          >
+            <Icon name="download" size={16} /> {busy ? 'Preparing…' : 'Download certificate'}
+          </button>
+        </div>
+      )}
       {shown.length === 0 && <p className="note">No graded items yet.</p>}
       <div className="group-grid">
       {shown.map((g) => {

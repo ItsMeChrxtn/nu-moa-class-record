@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import { User, Student, Section, Enrollment, audit } from './models.js';
 import { COMPONENTS, MARKS, attendanceItems, cleanScale, computeGrades, scaleOf } from './grading.js';
 import { saveCredentials } from './credentials.js';
-import { cleanSchedule, legacyFields } from './schedule.js';
+import { cleanBlocks, cleanSchedule, legacyFields } from './schedule.js';
 import { mailConfigured, sendStudentCredentials } from './mailer.js';
 import { buildClassRecord, facultyTerms, gradingFileName } from './classRecordExport.js';
 import admin from './admin.js';
@@ -78,7 +78,7 @@ router.get(
   requirePasswordSet,
   requireRole('student'),
   wrap(async (req, res) => {
-    const enrollments = await Enrollment.find({ student: req.user.student }).populate('section');
+    const enrollments = await Enrollment.find({ student: req.user.student }).populate({ path: 'section', populate: { path: 'faculty', select: 'name' } });
     const records = enrollments
       .filter((e) => e.section?.published)
       .map((e) => {
@@ -86,7 +86,7 @@ router.get(
         // Attendance shows up as one "Attendance" item per period inside CP or EA.
         const att = attendanceItems(s, e);
         return {
-          section: { ...sectionSummary(s), weights: s.weights },
+          section: { ...sectionSummary(s), weights: s.weights, faculty: s.faculty?.name || null },
           items: [...s.items.map(itemDto), ...att.map(attItemDto)],
           scores: { ...Object.fromEntries(e.scores), ...Object.fromEntries(att.map((a) => [a._id, a.score])) },
           attendance: attendanceSummary(s, e),
@@ -102,6 +102,19 @@ router.get(
 
 const faculty = express.Router();
 faculty.use(requireAuth, requirePasswordSet, requireRole('faculty'));
+
+// Weekly blocks besides classes (consultation hours, meetings…), for the weekly schedule.
+faculty.get('/schedule-blocks', wrap(async (req, res) => res.json({ blocks: req.user.scheduleBlocks || [] })));
+faculty.put(
+  '/schedule-blocks',
+  wrap(async (req, res) => {
+    const { rows, error } = cleanBlocks(req.body?.blocks);
+    if (error) return res.status(400).json({ error });
+    req.user.scheduleBlocks = rows;
+    await req.user.save();
+    res.json({ blocks: rows });
+  })
+);
 
 const ownSection = wrap(async (req, res, next) => {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Not found' });
