@@ -293,7 +293,7 @@ input.autofilled { background: var(--blue-soft); border-color: #b9c9f3; }
 .add-icon { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 6px; border-radius: 12px; background: var(--blue); color: #fff; border: 1.5px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); }
 
 /* ───────────────────────── Section record ───────────────────────── */
-.stats.record-stats { grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.5fr); }
+.stats.record-stats { grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.6fr); }
 .dist { gap: 10px; }
 .dist-head { display: flex; justify-content: space-between; align-items: baseline; }
 .hist { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; height: 76px; align-items: end; }
@@ -741,3 +741,95 @@ button.mark:active { transform: scale(0.92); }
 .scale-note { font-size: 0.78rem; color: var(--ink-3); }
 .reset-link { color: var(--blue); }
 .reset-link:disabled { color: var(--ink-3); text-decoration: none; cursor: default; }
+
+/* ───────────────────────── Menus, term tabs, toolbar ───────────────────────── */
+.menu { position: relative; }
+.menu-list { position: absolute; top: calc(100% + 8px); z-index: 40; min-width: 260px; padding: 6px; background: var(--surface); border: 1.5px solid var(--ink); border-radius: 12px; box-shadow: var(--hard); animation: rise 0.15s ease-out both; }
+.menu-right { right: 0; }
+.menu-left { left: 0; }
+.menu-list button { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; background: none; text-align: left; font-size: 0.86rem; font-weight: 600; color: var(--ink); cursor: pointer; }
+.menu-list button .icon { margin-top: 1px; color: var(--ink-2); flex: none; }
+.menu-list button span { display: grid; gap: 1px; }
+.menu-list button small { font-size: 0.74rem; font-weight: 400; color: var(--ink-3); }
+.menu-list button:hover, .menu-list button:focus-visible { outline: none; background: var(--bg); }
+.menu-list button.danger, .menu-list button.danger .icon { color: var(--red-ink); }
+.menu-list button.danger:hover { background: var(--red-soft); }
+.menu-list hr { margin: 6px 4px; border: 0; border-top: 1px solid var(--line); }
+
+.view-tabs { align-items: center; }
+.view-tabs .tab-end { margin-left: auto; }
+.tab-hint { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; border-radius: 10px; border: 1px dashed var(--line-2); font-size: 0.78rem; color: var(--ink-3); }
+
+.table-toolbar .toolbar-title { display: grid; gap: 2px; }
+.table-toolbar .toolbar-title strong { font-family: var(--display); font-size: 1.05rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.01em; }
+.table-toolbar .toolbar-title span { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-3); }
+.toolbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.table-meta { justify-content: space-between; padding: 9px 16px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.table-card .empty { margin: 18px; }
+
+.record th.grp-REF { background: var(--bg); color: var(--ink-2); }
+.record th.grp-REF::before { display: none; }
+.record td.ref-col { color: var(--ink-2); }
+.record td.ref-col .num { color: var(--ink-3); }
+
+.choice-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.choice-list .choice { flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; }
+
+@media (max-width: 680px) {
+  .choice-list { grid-template-columns: 1fr; }
+  .choice-list .choice { flex-direction: row; align-items: center; }
+  .view-tabs { flex-wrap: wrap; }
+  .view-tabs .tab-end { margin-left: 0; }
+  .toolbar-right, .toolbar-right .input-icon { width: 100%; }
+}
+
+/* ───────────────────────── Student report ───────────────────────── */
+.info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 28px; margin: 22px 0 0; padding-top: 20px; border-top: 1px solid var(--line); }
+.info-grid dt { font-family: var(--mono); font-size: 0.68rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.info-grid dd { margin: 4px 0 0; font-size: 0.92rem; font-weight: 600; color: var(--ink); white-space: pre-line; line-height: 1.45; }
+.grade-pair { display: flex; gap: 14px; }
+.grade-tile { display: grid; justify-items: center; gap: 8px; min-width: 150px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.grade-tile.active { border: 1.5px solid var(--ink); box-shadow: var(--hard); }
+.grade-tile-label { font-family: var(--mono); font-size: 0.68rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.grade-tile-pct { font-family: var(--mono); font-size: 0.82rem; font-weight: 700; color: var(--ink-2); }
+.grade-tile.pending { align-content: center; border-style: dashed; background: var(--bg); }
+.pending-text { font-size: 0.84rem; color: var(--ink-3); }
+.term-tabs { display: flex; gap: 8px; }
+.term-tabs button { display: inline-flex; align-items: baseline; gap: 10px; height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--surface); font-family: var(--display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; font-size: 0.95rem; color: var(--ink-2); line-height: 44px; }
+.term-tabs button small { font-family: var(--mono); font-size: 0.76rem; font-weight: 500; text-transform: none; color: var(--ink-3); }
+.term-tabs button:hover { color: var(--ink); border-color: var(--ink); }
+.term-tabs button[aria-selected='true'] { background: var(--ink); color: #fff; border-color: var(--ink); box-shadow: 3px 3px 0 var(--blue); }
+.term-tabs button[aria-selected='true'] small { color: #cbd5e1; }
+.term-grade { display: grid; justify-items: end; gap: 2px; }
+.term-grade strong { font-family: var(--display); font-weight: 900; font-size: 1.7rem; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.term-grade .mini-gp { font-family: var(--mono); font-size: 0.78rem; font-weight: 700; color: var(--blue); }
+.term-grade .mini-gp.fail { color: var(--red); }
+.group-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; }
+.group-grid .group { padding-top: 4px; }
+
+@media (max-width: 900px) {
+  .spotlight { grid-template-columns: 1fr; padding: 28px 24px; }
+  .group-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .info-grid { grid-template-columns: 1fr; }
+  .grade-pair { width: 100%; }
+  .grade-tile { flex: 1; min-width: 0; }
+  .term-tabs button { flex: 1; justify-content: center; padding: 0 10px; }
+}
+.group-grid .group-head h4 { flex: 1; min-width: 0; }
+.group-grid .group-total { white-space: nowrap; }
+.group-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+
+/* Section card: where the section is in the term */
+.term-progress { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.term-step { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 8px; font-family: var(--mono); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid var(--line); color: var(--ink-3); background: var(--bg); }
+.term-step strong { font-weight: 700; color: inherit; }
+.term-step.now { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+.term-step.done { color: var(--ink-2); background: var(--surface); }
+.term-step.later { border-style: dashed; }
+
+/* Admin: activity grouped by day, term filter */
+.activity-day + .activity-day { border-top: 1px solid var(--line); }
+.activity-day-title { display: flex; align-items: center; gap: 8px; padding: 14px 16px 4px; font-family: var(--mono); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+.term-select { height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--surface); font-family: var(--mono); font-size: 0.8rem; color: var(--ink); }

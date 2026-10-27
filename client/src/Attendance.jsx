@@ -151,7 +151,7 @@ export function AttendanceView({ sectionId, data, setData, query, setQuery }) {
         <strong className="att-add-title"><Icon name="plus" size={15} /> Add session</strong>
         <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required aria-label="Date" />
         <div className="segmented att-period">
-          {[['MID', 'Midterms'], ['POST', 'Post Midterms']].map(([k, label]) => (
+          {[['MID', 'Midterms'], ['POST', 'Finals']].map(([k, label]) => (
             <button key={k} type="button" className={form.period === k ? 'active' : ''} onClick={() => setForm({ ...form, period: k })}>{label}</button>
           ))}
         </div>

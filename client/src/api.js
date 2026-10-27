@@ -21,7 +21,10 @@ export const COMPONENTS = [
   { key: 'CPT', name: 'Culminating Performance Task' },
 ];
 
-export const PERIODS = { MID: 'Midterms (Wk 1–7)', POST: 'Post Midterms (Wk 8–13)' };
+export const PERIODS = { MID: 'Midterms (Wk 1–7)', POST: 'Finals (Wk 8–13)' };
+// Which components belong to each term: MPT is a midterm task, CPT a finals task.
+export const TERM_COMPONENTS = { MID: ['CP', 'EA', 'MPT'], POST: ['CP', 'EA', 'CPT'] };
+export const termOf = (item) => (item.component === 'MPT' ? 'MID' : item.component === 'CPT' ? 'POST' : item.period === 'POST' ? 'POST' : 'MID');
 
 // Display order: CP mid, CP post, EA mid, EA post, MPT, CPT.
 export function sortItems(items) {

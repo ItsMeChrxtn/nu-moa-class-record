@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, COMPONENTS, schedule } from '../api.js';
+import { api, COMPONENTS, schedule, termOf } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { EmptyState, ErrorState, Hero, PageLoader, Ring, eqTone, splitName, titleCase } from '../ui.jsx';
 
@@ -58,9 +58,20 @@ function Report({ record, name }) {
   const { section, grades, scores, bonus, items } = record;
   const w = section.weights || {};
   const { first, last } = splitName(name);
-  const fail = eqTone(grades.final.equivalent) === 'fail';
-  const pick = (component, period) => items.filter((i) => i.component === component && (!period || i.period === period));
-  const sched = schedule(section).map((x) => [x.day, x.time].filter(Boolean).join(' ')).filter(Boolean);
+  const pick = (component, period) => items.filter((i) => i.component === component && termOf(i) === period);
+  // Finals shows up once the faculty has added finals items.
+  const finalsOpen = items.some((i) => termOf(i) === 'POST');
+  const [view, setView] = useState(finalsOpen ? 'POST' : 'MID');
+  const tab = finalsOpen ? view : 'MID';
+  const current = tab === 'MID' ? grades.midterm : grades.final;
+  const fail = eqTone(current.equivalent) === 'fail';
+  const sched = schedule(section).map((x) => [x.day, x.time, x.room && `Rm ${x.room}`].filter(Boolean).join(' · ')).filter(Boolean);
+  const details = [
+    ['Section', section.code],
+    ['Subject', [section.subjectCode, section.subjectTitle && titleCase(section.subjectTitle)].filter(Boolean).join(' · ')],
+    ['Term', [section.term, section.academicYear && `A.Y. ${section.academicYear}`].filter(Boolean).join(' · ')],
+    ['Schedule', sched.join('\n')],
+  ].filter(([, v]) => v);
 
   return (
     <>
@@ -70,41 +81,63 @@ function Report({ record, name }) {
           <h2>
             {first} {last && <span>{last}</span>}
           </h2>
-          <ul className="tags">
-            <li>{section.code}</li>
-            {section.subjectCode && <li>{section.subjectCode}</li>}
-            {section.subjectTitle && <li>{titleCase(section.subjectTitle)}</li>}
-            {(section.term || section.academicYear) && <li>{[section.term, section.academicYear].filter(Boolean).join(' ')}</li>}
-            {sched.map((s) => <li key={s}>{s}</li>)}
-          </ul>
-          <div className="spotlight-note">
-            <span><strong>Midterm grade</strong> {fmtPct(grades.midterm.percent)} · GP {grades.midterm.equivalent ?? '—'}</span>
-            <span><strong>Final grade</strong> {fmtPct(grades.final.percent)} · GP {grades.final.equivalent ?? '—'}</span>
-          </div>
+          <dl className="info-grid">
+            {details.map(([k, v]) => (
+              <div key={k}>
+                <dt>{k}</dt>
+                <dd>{v}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
-        <Ring label="Final grade" percent={grades.final.percent} eq={grades.final.equivalent} />
+        <div className="grade-pair">
+          <GradeTile label="Midterm grade" grade={grades.midterm} active={tab === 'MID'} />
+          {finalsOpen ? (
+            <GradeTile label="Final grade" grade={grades.final} active={tab === 'POST'} />
+          ) : (
+            <div className="grade-tile pending">
+              <span className="grade-tile-label">Final grade</span>
+              <span className="pending-text">After midterms</span>
+            </div>
+          )}
+        </div>
       </section>
 
-      <div className="terms">
+      <div className="term-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === 'MID'} onClick={() => setView('MID')}>
+          Midterms <small>{fmtPct(grades.midterm.percent)}</small>
+        </button>
+        {finalsOpen && (
+          <button role="tab" aria-selected={tab === 'POST'} onClick={() => setView('POST')}>
+            Finals <small>{fmtPct(grades.final.percent)}</small>
+          </button>
+        )}
+      </div>
+
+      {tab === 'MID' ? (
         <Term
-          title="Midterm"
+          key="MID"
+          title="Midterms"
           weeks="Weeks 1 – 7"
           grade={grades.midterm}
           groups={[
             { key: 'CP', items: pick('CP', 'MID'), weight: w.midterm?.CP },
             { key: 'EA', items: pick('EA', 'MID'), weight: w.midterm?.EA },
-            { key: 'MPT', items: pick('MPT'), weight: w.midterm?.MPT },
+            { key: 'MPT', items: pick('MPT', 'MID'), weight: w.midterm?.MPT },
           ]}
           scores={scores}
+          footer={<p className="note">Items without a score (—) count as 0. If a score looks off, message your instructor.</p>}
         />
+      ) : (
         <Term
+          key="POST"
           title="Finals"
           weeks="Weeks 8 – 13"
           grade={grades.final}
           groups={[
             { key: 'CP', items: pick('CP', 'POST'), weight: w.final?.CP },
             { key: 'EA', items: pick('EA', 'POST'), weight: w.final?.EA },
-            { key: 'CPT', items: pick('CPT'), weight: w.final?.CPT },
+            { key: 'CPT', items: pick('CPT', 'POST'), weight: w.final?.CPT },
           ]}
           scores={scores}
           footer={
@@ -117,23 +150,37 @@ function Report({ record, name }) {
             </>
           }
         />
-      </div>
+      )}
     </>
+  );
+}
+
+function GradeTile({ label, grade, active }) {
+  return (
+    <div className={`grade-tile ${active ? 'active' : ''}`}>
+      <span className="grade-tile-label">{label}</span>
+      <Ring mini size={92} stroke={8} percent={grade.percent} eq={grade.equivalent} />
+      <span className="grade-tile-pct">{fmtPct(grade.percent)}</span>
+    </div>
   );
 }
 
 function Term({ title, weeks, grade, groups, scores, footer }) {
   const shown = groups.filter((g) => g.items.length);
   return (
-    <section className="term">
+    <section className="term term-wide">
       <div className="term-head">
         <div>
           <h3>{title}</h3>
           <p className="weeks">{weeks}</p>
         </div>
-        <Ring mini size={74} stroke={7} percent={grade.percent} eq={grade.equivalent} />
+        <span className="term-grade">
+          <strong>{fmtPct(grade.percent)}</strong>
+          <span className={`mini-gp ${eqTone(grade.equivalent) === 'fail' ? 'fail' : ''}`}>GP {grade.equivalent ?? '—'}</span>
+        </span>
       </div>
       {shown.length === 0 && <p className="note">No graded items yet.</p>}
+      <div className="group-grid">
       {shown.map((g) => {
         const got = g.items.reduce((s, i) => s + (scores[i.id] ?? 0), 0);
         const max = g.items.reduce((s, i) => s + i.max, 0);
@@ -161,6 +208,7 @@ function Term({ title, weeks, grade, groups, scores, footer }) {
           </div>
         );
       })}
+      </div>
       {footer}
     </section>
   );

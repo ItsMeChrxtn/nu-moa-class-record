@@ -75,10 +75,17 @@ function SectionCard({ s, onDelete }) {
           </div>
         ))}
       </div>
+      <div className="term-progress" title="Graded items per term">
+        <span className={`term-step ${s.finalsItemCount ? 'done' : 'now'}`}>
+          Midterms <strong>{s.itemCount - (s.finalsItemCount || 0)}</strong>
+        </span>
+        <span className={`term-step ${s.finalsItemCount ? 'now' : 'later'}`}>
+          Finals <strong>{s.finalsItemCount || 0}</strong>
+        </span>
+      </div>
       <div className="section-foot">
         <div className="foot-stats">
           <span className="foot-stat"><Icon name="users" size={15} /><strong>{s.studentCount}</strong> students</span>
-          <span className="foot-stat"><Icon name="list" size={15} /><strong>{s.itemCount}</strong> items</span>
         </div>
         <span className="card-tools">
           <button

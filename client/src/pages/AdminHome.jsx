@@ -25,6 +25,9 @@ const ACTIONS = {
   'section.enroll': 'Enrolled students',
   'section.publish': 'Published grades',
   'section.unpublish': 'Hid grades',
+  'section.accounts': 'Set up student accounts',
+  'section.grade-scale': 'Changed grade scale',
+  'section.sample': 'Added sample scores',
   'item.delete': 'Deleted item',
   'student.remove': 'Removed student',
   'student.reset-password': 'Reset student password',
@@ -40,7 +43,31 @@ export function ago(date) {
   if (s < 86400 * 7) return `${Math.floor(s / 86400)} d ago`;
   return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
-const stamp = (d) => new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const clock = (d) => new Date(d).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+// "Today", "Yesterday", or the date, for grouping the activity log by day.
+function dayLabel(d) {
+  const day = new Date(d).toDateString();
+  const today = new Date();
+  if (day === today.toDateString()) return 'Today';
+  if (day === new Date(today.getTime() - 86400000).toDateString()) return 'Yesterday';
+  return new Date(d).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+// [[day, entries], …] in the list's order (newest first).
+function byDay(list) {
+  const days = new Map();
+  for (const a of list) {
+    const k = dayLabel(a.at);
+    if (!days.has(k)) days.set(k, []);
+    days.get(k).push(a);
+  }
+  return [...days];
+}
+const TERM_ORDER = ['first', 'second', 'third', 'summer'];
+const termRank = (t) => {
+  const i = TERM_ORDER.indexOf(String(t || '').trim().toLowerCase().split(/\s+/)[0]);
+  return i < 0 ? 99 : i;
+};
+const termKey = (s) => `${s.academicYear || ''}|${s.term || ''}`;
 
 export default function AdminHome() {
   const { user } = useAuth();
@@ -394,6 +421,7 @@ function SectionsTab() {
   const [faculty, setFaculty] = useState([]);
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
+  const [termFilter, setTermFilter] = useState('');
 
   useEffect(() => {
     Promise.all([api('/admin/sections'), api('/admin/faculty')])
@@ -425,16 +453,31 @@ function SectionsTab() {
   if (error) return <div className="alert error"><Icon name="alert" />{error}</div>;
   if (!sections) return <PageLoader />;
   const ql = q.trim().toLowerCase();
-  const rows = sections.filter((s) => !ql || `${s.code} ${s.subjectCode} ${s.subjectTitle} ${s.faculty?.name}`.toLowerCase().includes(ql));
+  // Terms present, newest academic year first, terms in order within it.
+  const terms = [...new Map(sections.map((s) => [termKey(s), s])).values()]
+    .sort((a, b) => (b.academicYear || '').localeCompare(a.academicYear || '') || termRank(a.term) - termRank(b.term))
+    .map((s) => ({ key: termKey(s), label: [s.academicYear ? `A.Y. ${s.academicYear}` : 'No A.Y.', s.term || 'No term'].join(' · ') }));
+  const rows = sections
+    .filter((s) => !termFilter || termKey(s) === termFilter)
+    .filter((s) => !ql || `${s.code} ${s.subjectCode} ${s.subjectTitle} ${s.faculty?.name}`.toLowerCase().includes(ql))
+    .sort((a, b) => (b.academicYear || '').localeCompare(a.academicYear || '') || termRank(a.term) - termRank(b.term) || a.code.localeCompare(b.code));
 
   return (
     <section className="card table-card admin-card">
       <div className="table-toolbar">
-        <h2 className="panel-title">All sections <span className="count-badge">{sections.length}</span></h2>
-        <span className="input-icon">
-          <Icon name="search" />
-          <input placeholder="Search code, subject or faculty…" value={q} onChange={(e) => setQ(e.target.value)} />
-        </span>
+        <h2 className="panel-title">All sections <span className="count-badge">{rows.length}</span></h2>
+        <div className="toolbar-right">
+          <select className="term-select" value={termFilter} onChange={(e) => setTermFilter(e.target.value)} aria-label="Academic year and term">
+            <option value="">All terms</option>
+            {terms.map((t) => (
+              <option key={t.key} value={t.key}>{t.label}</option>
+            ))}
+          </select>
+          <span className="input-icon">
+            <Icon name="search" />
+            <input placeholder="Search code, subject or faculty…" value={q} onChange={(e) => setQ(e.target.value)} />
+          </span>
+        </div>
       </div>
       {sections.length === 0 ? (
         <EmptyState icon="layers" title="No sections yet">Faculty create sections from their dashboard.</EmptyState>
@@ -476,7 +519,7 @@ function SectionsTab() {
               ))}
             </tbody>
           </table>
-          {rows.length === 0 && <div className="no-results">No sections match “{q}”.</div>}
+          {rows.length === 0 && <div className="no-results">No sections match{q ? ` “${q}”` : ' this term'}.</div>}
         </div>
       )}
     </section>
@@ -609,23 +652,28 @@ function ActivityTab() {
       {list.length === 0 ? (
         <div className="empty-inline">Nothing recorded yet. Actions are logged from now on.</div>
       ) : (
-        <ol className="activity">
-          {list.map((a) => (
-            <li key={a.id} className={DANGER.has(a.action) ? 'danger' : ''}>
-              <span className="act-dot" />
-              <div className="act-body">
-                <p>
-                  <strong>{a.actor ? titleCase(a.actor) : 'System'}</strong>
-                  {a.role && <span className="act-role">{a.role}</span>}
-                  <span className="act-verb">{ACTIONS[a.action] || a.action}</span>
-                  {a.target && <span className="act-target">{a.target}</span>}
-                </p>
-                {a.detail && <p className="act-detail">{a.detail}</p>}
-              </div>
-              <time className="act-time" dateTime={a.at} title={new Date(a.at).toLocaleString()}>{stamp(a.at)}</time>
-            </li>
-          ))}
-        </ol>
+        byDay(list).map(([day, entries]) => (
+          <div key={day} className="activity-day">
+            <h3 className="activity-day-title">{day} <span className="count-badge">{entries.length}</span></h3>
+            <ol className="activity">
+              {entries.map((a) => (
+                <li key={a.id} className={DANGER.has(a.action) ? 'danger' : ''}>
+                  <span className="act-dot" />
+                  <div className="act-body">
+                    <p>
+                      <strong>{a.actor ? titleCase(a.actor) : 'System'}</strong>
+                      {a.role && <span className="act-role">{a.role}</span>}
+                      <span className="act-verb">{ACTIONS[a.action] || a.action}</span>
+                      {a.target && <span className="act-target">{a.target}</span>}
+                    </p>
+                    {a.detail && <p className="act-detail">{a.detail}</p>}
+                  </div>
+                  <time className="act-time" dateTime={a.at} title={new Date(a.at).toLocaleString()}>{clock(a.at)}</time>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ))
       )}
     </section>
   );

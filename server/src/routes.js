@@ -126,6 +126,8 @@ faculty.get(
         published: s.published,
         studentCount: byId[String(s._id)] || 0,
         itemCount: s.items.length,
+        // MPT counts as Midterms, CPT as Finals; CP/EA by their period.
+        finalsItemCount: s.items.filter((i) => i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST')).length,
       })),
     });
   })
@@ -189,7 +191,9 @@ faculty.post(
     const { component, period, label, max } = req.body || {};
     if (!COMPONENTS.includes(component)) return res.status(400).json({ error: 'Invalid component' });
     if (!label || !(Number(max) > 0)) return res.status(400).json({ error: 'A label and a max score are required.' });
-    req.section.items.push({ component, period: period === 'POST' ? 'POST' : 'MID', label, max: Number(max) });
+    // Midterms: CP, EA, MPT. Finals: CP, EA, CPT.
+    const term = component === 'MPT' ? 'MID' : component === 'CPT' ? 'POST' : period === 'POST' ? 'POST' : 'MID';
+    req.section.items.push({ component, period: term, label, max: Number(max) });
     await req.section.save();
     res.json(await sectionDetail(req.section));
   })

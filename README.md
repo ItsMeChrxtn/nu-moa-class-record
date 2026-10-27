@@ -74,7 +74,7 @@ If Brevo restricts API keys to approved IP addresses, add the server's IP in Bre
 
 ## Delete a section
 
-Use the trash icon on a section card (dashboard) or next to **+ Item** on the section page. You must type the section code to confirm. This deletes the section's items, scores and enrollments; student accounts are kept.
+Use the trash icon on a section card (dashboard) or **Manage → Delete section** on the section page. You must type the section code to confirm. This deletes the section's items, scores and enrollments; student accounts are kept.
 
 ## Run
 
@@ -88,12 +88,13 @@ For production: `npm run build`, then `npm start`. The server (port 5000) also s
 
 ## Grading (same as the Excel file)
 
+- **Midterms and Finals tabs.** A section page has a Midterms tab (CP, EA, MPT and the midterm grade) and a Finals tab (CP, EA, CPT, bonus, the midterm grade for reference and the final grade). The Finals tab appears once the Midterm Performance Task has scores, or once finals items exist. **+ Midterm item** / **+ Finals item** only offers that term's components (MPT is always Midterms, CPT always Finals; the server enforces it). Students see the same two tabs; Finals shows once the faculty adds finals items.
 - **Midterm %** = CP(Midterms) × 30 + EA(Midterms) × 30 + MPT × 40
 - **Final %** = CP(all) × 30 + EA(all) × 30 + MPT × 20 + CPT × 20 + Bonus
 - Each component = total score ÷ total max of its items. Missing scores count as 0.
 - Equivalence: ≥95.5 = 4.0, ≥89.5 = 3.5, ≥83.5 = 3.0, ≥77.5 = 2.5, ≥71.5 = 2.0, ≥65.5 = 1.5, ≥59.5 = 1.0, lower = R. Pass/Repeat for "The Nationalian" subjects.
-- Percentages can be changed per section (**Percentage** button).
-- The equivalence above is the NU default. Each section can have its own table (**Percentage** → Grade point equivalence, up to 7 grades plus R). The lowest row is the passing grade (e.g. start it at 75 for 75%). The exported class record prints the table set in the app. The app's grades and the exported class record's Grade Point Equivalence Table both follow it; **Reset to NU default** brings the default back.
+- Percentages can be changed per section (**Manage → Percentage & grade scale**).
+- The equivalence above is the NU default. Each section can have its own table (**Manage → Percentage & grade scale** → Grade point equivalence, up to 7 grades plus R). The lowest row is the passing grade (e.g. start it at 75 for 75%). The exported class record prints the table set in the app. The app's grades and the exported class record's Grade Point Equivalence Table both follow it; **Reset to NU default** brings the default back.
 
 Verified against the Excel file: Midterm/Final % and equivalents match for all 133 students.
 
@@ -116,7 +117,7 @@ Verified against the Excel file: Midterm/Final % and equivalents match for all 1
 On a section page, open the **Attendance** tab.
 
 - **Counts toward:** Class Participation, Enabling Activities, or Not graded. Each period's attendance becomes one "Attendance" item inside that component: present = 1 point, late = the chosen value (default 0.5), absent = 0; excused sessions are not counted and unmarked sessions count as absent.
-- **Add session:** date, Midterms / Post Midterms, optional label; "Mark everyone present" is on by default.
+- **Add session:** date, Midterms / Finals, optional label; "Mark everyone present" is on by default.
 - Click a cell to cycle Present → Late → Absent → Excused → blank. Column buttons mark everyone present or delete a session.
 - Attendance appears read-only in the grade grid and in the student's grade breakdown.
 
