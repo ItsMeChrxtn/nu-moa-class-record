@@ -115,20 +115,30 @@ faculty.get(
   '/sections',
   wrap(async (req, res) => {
     const sections = await Section.find({ faculty: req.user._id }).sort({ code: 1 });
-    const counts = await Enrollment.aggregate([
-      { $match: { section: { $in: sections.map((s) => s._id) } } },
-      { $group: { _id: '$section', n: { $sum: 1 } } },
-    ]);
-    const byId = Object.fromEntries(counts.map((c) => [String(c._id), c.n]));
+    const enrollments = await Enrollment.find({ section: { $in: sections.map((s) => s._id) } }, 'section scores attendance bonus');
+    const bySection = new Map();
+    for (const e of enrollments) {
+      const k = String(e.section);
+      if (!bySection.has(k)) bySection.set(k, []);
+      bySection.get(k).push(e);
+    }
+    const avg = (list) => (list.length ? Math.round((list.reduce((a, b) => a + b, 0) / list.length) * 100) / 100 : null);
     res.json({
-      sections: sections.map((s) => ({
-        ...sectionSummary(s),
-        published: s.published,
-        studentCount: byId[String(s._id)] || 0,
-        itemCount: s.items.length,
-        // MPT counts as Midterms, CPT as Finals; CP/EA by their period.
-        finalsItemCount: s.items.filter((i) => i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST')).length,
-      })),
+      sections: sections.map((s) => {
+        const list = bySection.get(String(s._id)) || [];
+        const grades = list.map((e) => computeGrades(s, e));
+        return {
+          ...sectionSummary(s),
+          published: s.published,
+          studentCount: list.length,
+          itemCount: s.items.length,
+          // MPT counts as Midterms, CPT as Finals; CP/EA by their period.
+          finalsItemCount: s.items.filter((i) => i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST')).length,
+          // Class averages for the dashboard cards (null until the section has students and items).
+          midtermAverage: s.items.length ? avg(grades.map((g) => g.midterm.percent)) : null,
+          finalAverage: s.items.length ? avg(grades.map((g) => g.final.percent)) : null,
+        };
+      }),
     });
   })
 );

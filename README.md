@@ -88,6 +88,7 @@ For production: `npm run build`, then `npm start`. The server (port 5000) also s
 
 ## Grading (same as the Excel file)
 
+- **Dashboards.** Faculty home: today's date, a Today's classes panel (from each section's schedule, with Now / Next / Done), stat tiles, and each section card's class average per term. Admin: faculty, sections, students and student accounts in use. Students in more than one class pick it from cards showing their latest grade.
 - **Midterms and Finals tabs.** A section page has a Midterms tab (CP, EA, MPT and the midterm grade) and a Finals tab (CP, EA, CPT, bonus, the midterm grade for reference and the final grade). The Finals tab appears once the Midterm Performance Task has scores, or once finals items exist. **+ Midterm item** / **+ Finals item** only offers that term's components (MPT is always Midterms, CPT always Finals; the server enforces it). Students see the same two tabs; Finals shows once the faculty adds finals items.
 - **Midterm %** = CP(Midterms) × 30 + EA(Midterms) × 30 + MPT × 40
 - **Final %** = CP(all) × 30 + EA(all) × 30 + MPT × 20 + CPT × 20 + Bonus

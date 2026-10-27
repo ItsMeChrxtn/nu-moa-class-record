@@ -105,16 +105,30 @@ export function Avatar({ name, size = 36 }) {
   );
 }
 
-export function Stat({ icon, label, value, sub }) {
+// tone: blue | teal | amber | ink | red — the colour of the icon tile.
+export function Stat({ icon, label, value, sub, tone }) {
   return (
-    <div className="stat">
+    <div className={`stat ${tone ? `stat-tone tone-${tone}` : ''}`}>
       <div className="stat-top">
         <span className="stat-label">{label}</span>
-        {icon && <Icon name={icon} size={16} />}
+        {icon && (tone ? <span className="stat-icon"><Icon name={icon} size={18} /></span> : <Icon name={icon} size={16} />)}
       </div>
       <div className="stat-value">{value}</div>
       {sub && <div className="stat-sub">{sub}</div>}
     </div>
+  );
+}
+
+// Today's date, e.g. "Tue · Oct 27, 2026", for dashboard headers.
+export function TodayChip() {
+  const d = new Date();
+  return (
+    <span className="today-chip">
+      <Icon name="calendar" size={15} />
+      <span>
+        <strong>{d.toLocaleDateString(undefined, { weekday: 'short' })}</strong> · {d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+      </span>
+    </span>
   );
 }
 

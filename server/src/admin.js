@@ -39,15 +39,17 @@ async function findFaculty(req, res) {
 admin.get(
   '/overview',
   wrap(async (req, res) => {
-    const [faculty, disabled, sections, published, students, enrollments] = await Promise.all([
+    const [faculty, disabled, sections, published, students, enrollments, accounts, activeAccounts] = await Promise.all([
       User.countDocuments({ role: 'faculty' }),
       User.countDocuments({ role: 'faculty', disabled: true }),
       Section.countDocuments(),
       Section.countDocuments({ published: true }),
       Student.countDocuments(),
       Enrollment.countDocuments(),
+      User.countDocuments({ role: 'student' }),
+      User.countDocuments({ role: 'student', mustChangePassword: false }), // signed in and set their own password
     ]);
-    res.json({ faculty, disabled, sections, published, students, enrollments, mailConfigured: mailConfigured() });
+    res.json({ faculty, disabled, sections, published, students, enrollments, accounts, activeAccounts, mailConfigured: mailConfigured() });
   })
 );
 

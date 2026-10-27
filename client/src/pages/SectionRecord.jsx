@@ -206,9 +206,10 @@ export default function SectionRecord() {
 
       <div className="container lift">
         <div className="stats record-stats">
-          <Stat icon="users" label="Students" value={data.rows.length} />
-          <Stat icon={term === 'MID' ? 'chart' : 'award'} label={`Class average · ${TERM[term].name}`} value={<>{fmt(summary.avg)}<small>%</small></>} />
+          <Stat tone="blue" icon="users" label="Students" value={data.rows.length} />
+          <Stat tone="amber" icon={term === 'MID' ? 'chart' : 'award'} label={`Class average · ${TERM[term].name}`} value={<>{fmt(summary.avg)}<small>%</small></>} />
           <Stat
+            tone="teal"
             icon="check"
             label={`Passing · ${TERM[term].name}`}
             value={<>{summary.passing}<small> / {data.rows.length}</small></>}

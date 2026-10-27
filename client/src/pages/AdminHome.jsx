@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
-import { Avatar, EmptyState, ErrorState, Hero, Icon, Modal, PageLoader, Stat, firstName, titleCase, useUI } from '../ui.jsx';
+import { Avatar, EmptyState, ErrorState, Hero, Icon, Modal, PageLoader, Stat, TodayChip, firstName, titleCase, useUI } from '../ui.jsx';
 
 const TABS = [
   { key: 'faculty', label: 'Faculty', icon: 'users' },
@@ -99,12 +99,14 @@ export default function AdminHome() {
         eyebrow="Administrator · NU MOA"
         title={<>Admin <span className="accent">console.</span></>}
         lead={`Welcome, ${firstName(user.name)}. Manage faculty accounts, see every section, and review recent activity.`}
+        actions={<TodayChip />}
       />
       <div className="container">
         <div className="stats">
-          <Stat icon="users" label="Faculty" value={overview.faculty} sub={overview.disabled ? `${overview.disabled} disabled` : 'All active'} />
-          <Stat icon="layers" label="Sections" value={overview.sections} sub={`${overview.published} published`} />
-          <Stat icon="user" label="Students" value={overview.students} sub={`${overview.enrollments} enrollments`} />
+          <Stat tone="blue" icon="users" label="Faculty" value={overview.faculty} sub={overview.disabled ? `${overview.disabled} disabled` : 'All active'} />
+          <Stat tone="teal" icon="layers" label="Sections" value={overview.sections} sub={`${overview.published} published`} />
+          <Stat tone="amber" icon="user" label="Students" value={overview.students} sub={`${overview.enrollments} enrollments`} />
+          <Stat tone="ink" icon="key" label="Student accounts" value={<>{overview.activeAccounts ?? 0}<small> / {overview.accounts ?? 0}</small></>} sub="Signed in and set a password" />
         </div>
 
         <div className="tabs" role="tablist">

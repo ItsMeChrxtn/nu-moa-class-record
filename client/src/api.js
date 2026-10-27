@@ -95,6 +95,17 @@ export function rowsFromText({ day, time, room }) {
 }
 
 // Rows for display: [{ day: 'WED', time: '7:00 AM – 9:40 AM', room: '1032' }]
+// The section's meetings on one day ('MON' …), with start/end as "HH:MM" for sorting.
+export function meetingsOn(section, day) {
+  const rows = section.schedule?.length
+    ? section.schedule.map((r) => ({ day: r.day, start: r.start, end: r.end, room: r.room || '' }))
+    : schedule(section).map((r) => ({ day: r.day, ...(parseTimeRange(r.time) || {}), room: r.room }));
+  return rows
+    .filter((r) => normalizeDay(r.day).includes(day))
+    .map((r) => ({ ...r, day, time: r.start ? `${to12(r.start)} – ${to12(r.end)}` : '' }));
+}
+export const todayCode = () => DAYS[(new Date().getDay() + 6) % 7];
+
 export function schedule(section) {
   if (section.schedule?.length)
     return section.schedule.map((r) => ({ day: r.day, time: `${to12(r.start)} – ${to12(r.end)}`, room: r.room || '' }));

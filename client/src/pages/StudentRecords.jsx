@@ -38,12 +38,23 @@ export default function StudentRecords() {
         ) : (
           <div className="report">
             {records.length > 1 && (
-              <div className="section-switch" role="tablist">
-                {records.map((r, i) => (
-                  <button key={r.section.id} role="tab" aria-selected={r === record} onClick={() => setActive(i)}>
-                    {r.section.code} · {r.section.subjectCode}
-                  </button>
-                ))}
+              <div className="class-picker" role="tablist" aria-label="Your classes">
+                {records.map((r, i) => {
+                  // The latest grade: the final once finals items exist, else the midterm.
+                  const finals = r.items.some((it) => termOf(it) === 'POST');
+                  const g = finals ? r.grades.final : r.grades.midterm;
+                  return (
+                    <button key={r.section.id} role="tab" aria-selected={r === record} onClick={() => setActive(i)}>
+                      <span className="class-code">{r.section.code}</span>
+                      <span className="class-subject">{titleCase(r.section.subjectTitle || r.section.subjectCode || '')}</span>
+                      <span className="class-grade">
+                        <small>{finals ? 'Final' : 'Midterm'}</small>
+                        <strong>{fmtPct(g.percent)}</strong>
+                        <span className={`mini-gp ${eqTone(g.equivalent) === 'fail' ? 'fail' : ''}`}>GP {g.equivalent ?? '—'}</span>
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
             <Report key={record.section.id} record={record} name={user.name} />

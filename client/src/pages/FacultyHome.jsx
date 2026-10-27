@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, schedule } from '../api.js';
+import { api, meetingsOn, schedule, todayCode } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { NewSectionModal, deleteSection } from '../Roster.jsx';
-import { EmptyState, ErrorState, Hero, Icon, PageLoader, Stat, firstName, greeting, titleCase, useUI } from '../ui.jsx';
+import { EmptyState, ErrorState, Hero, Icon, PageLoader, Stat, TodayChip, firstName, greeting, titleCase, useUI } from '../ui.jsx';
 
 const TERM_ORDER = ['first', 'second', 'third', 'summer'];
 const termRank = (t) => {
@@ -35,6 +35,65 @@ export function downloadSection(id) {
   document.body.appendChild(a);
   a.click();
   a.remove();
+}
+
+// One term on a section card: class average (bar) and item count.
+function TermMeter({ label, items, average, state }) {
+  return (
+    <div className={`term-step ${state}`} title={`${label}: ${items} item${items === 1 ? '' : 's'}${average != null ? `, class average ${average.toFixed(2)}%` : ''}`}>
+      <span className="term-step-top">
+        <span>{label}</span>
+        <strong>{average != null ? `${average.toFixed(1)}%` : state === 'later' ? 'Not yet' : '—'}</strong>
+      </span>
+      <span className="term-bar"><span style={{ width: `${Math.min(100, average || 0)}%` }} /></span>
+      <span className="term-step-sub">{items} item{items === 1 ? '' : 's'}</span>
+    </div>
+  );
+}
+
+// Classes that meet today, earliest first, with the one in progress or up next marked.
+function TodayPanel({ sections }) {
+  const day = todayCode();
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const toMin = (t) => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null);
+  const classes = sections
+    .flatMap((s) => meetingsOn(s, day).map((m) => ({ ...m, s })))
+    .sort((a, b) => (a.start || '99').localeCompare(b.start || '99'));
+  const nextIdx = classes.findIndex((c) => toMin(c.end) == null || toMin(c.end) > mins);
+
+  return (
+    <section className="today card">
+      <div className="today-head">
+        <div>
+          <span className="stat-label">Today · {now.toLocaleDateString(undefined, { weekday: 'long' })}</span>
+          <h2>{classes.length ? `${classes.length} class${classes.length === 1 ? '' : 'es'} today` : 'No classes today'}</h2>
+        </div>
+        <Icon name="calendar" size={20} />
+      </div>
+      {classes.length === 0 ? (
+        <p className="today-empty">Enjoy the free day. Your sections are below.</p>
+      ) : (
+        <ol className="today-list">
+          {classes.map((c, i) => {
+            const live = toMin(c.start) != null && toMin(c.start) <= mins && mins < toMin(c.end);
+            const done = toMin(c.end) != null && toMin(c.end) <= mins;
+            return (
+              <li key={`${c.s.id}-${i}`} className={live ? 'live' : done ? 'done' : i === nextIdx ? 'next' : ''}>
+                <Link to={`/faculty/sections/${c.s.id}`}>
+                  <span className="today-time">{c.time || 'Time not set'}</span>
+                  <span className="today-code">{c.s.code}</span>
+                  <span className="today-subject">{titleCase(c.s.subjectTitle || c.s.subjectCode || '')}</span>
+                  <span className="today-room">{c.room ? `Rm ${c.room}` : ''}</span>
+                  <span className="today-tag">{live ? 'Now' : done ? 'Done' : i === nextIdx ? 'Next' : ''}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
+  );
 }
 
 function SectionCard({ s, onDelete }) {
@@ -75,13 +134,9 @@ function SectionCard({ s, onDelete }) {
           </div>
         ))}
       </div>
-      <div className="term-progress" title="Graded items per term">
-        <span className={`term-step ${s.finalsItemCount ? 'done' : 'now'}`}>
-          Midterms <strong>{s.itemCount - (s.finalsItemCount || 0)}</strong>
-        </span>
-        <span className={`term-step ${s.finalsItemCount ? 'now' : 'later'}`}>
-          Finals <strong>{s.finalsItemCount || 0}</strong>
-        </span>
+      <div className="term-progress">
+        <TermMeter label="Midterms" items={s.itemCount - (s.finalsItemCount || 0)} average={s.midtermAverage} state={s.finalsItemCount ? 'done' : 'now'} />
+        <TermMeter label="Finals" items={s.finalsItemCount || 0} average={s.finalsItemCount ? s.finalAverage : null} state={s.finalsItemCount ? 'now' : 'later'} />
       </div>
       <div className="section-foot">
         <div className="foot-stats">
@@ -127,8 +182,10 @@ export default function FacultyHome() {
   const groups = termGroups(sections);
   const latest = groups[0];
   const students = sections.reduce((s, x) => s + x.studentCount, 0);
-  const items = sections.reduce((s, x) => s + x.itemCount, 0);
   const published = sections.filter((s) => s.published).length;
+  // Average of this term's section averages (midterm grade until finals start).
+  const current = (latest?.sections || []).map((s) => (s.finalsItemCount ? s.finalAverage : s.midtermAverage)).filter((v) => v != null);
+  const termAverage = current.length ? current.reduce((a, b) => a + b, 0) / current.length : null;
 
   const card = (s) => (
     <SectionCard
@@ -148,17 +205,29 @@ export default function FacultyHome() {
         title={<>{greeting()}, <span className="accent">{firstName(user.name)}.</span></>}
         lead="Choose a section to encode scores, adjust grade percentages, and publish grades to students."
         actions={
-          <button className="btn primary" onClick={() => setCreating(true)}>
-            <Icon name="plus" size={16} /> New Section
-          </button>
+          <>
+            <TodayChip />
+            <button className="btn primary" onClick={() => setCreating(true)}>
+              <Icon name="plus" size={16} /> New Section
+            </button>
+          </>
         }
       />
       <div className="container lift">
-        <div className="stats">
-          <Stat icon="layers" label="Sections" value={sections.length} />
-          <Stat icon="users" label="Students" value={students} sub="Across all sections" />
-          <Stat icon="list" label="Graded items" value={items} />
-          <Stat icon="eye" label="Published" value={<>{published}<small> / {sections.length}</small></>} sub="Visible to students" />
+        <div className="dash-top">
+          <div className="stats stats-2x2">
+            <Stat tone="blue" icon="layers" label="Sections" value={sections.length} sub={`${groups.length} term${groups.length === 1 ? '' : 's'}`} />
+            <Stat tone="teal" icon="users" label="Students" value={students} sub="Across all sections" />
+            <Stat
+              tone="amber"
+              icon="chart"
+              label="Class average"
+              value={<>{termAverage == null ? '—' : termAverage.toFixed(2)}<small>%</small></>}
+              sub={latest ? `${latest.term || 'Latest term'} · ${current.length} section${current.length === 1 ? '' : 's'}` : null}
+            />
+            <Stat tone="ink" icon="eye" label="Published" value={<>{published}<small> / {sections.length}</small></>} sub="Visible to students" />
+          </div>
+          <TodayPanel sections={latest?.sections || []} />
         </div>
 
         {sections.length === 0 ? (
