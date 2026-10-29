@@ -13,6 +13,11 @@ const SECTION = /^[A-Z]{2,5}\d{2,4}[A-Z]?$/;
 export const EMAIL = /[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/;
 const emailIn = (cells) => cells.join(' ').match(EMAIL)?.[0].toLowerCase() || '';
 
+// Masterlists can carry an enrollment status per row. Only enrolled students are imported:
+// a row marked "Registered" (signed up but not yet enrolled) is left out.
+const REGISTERED = /\bregistered\b/i;
+const ENROLLED = /\benrolled\b/i;
+
 const clean = (s) => s.replace(/\s+/g, ' ').replace(/\s+,/g, ',').trim();
 
 // Group positioned text items (pdf.js getTextContent) into rows of cells.
@@ -43,15 +48,20 @@ export function itemsToLines(items) {
 
 export function parseStudentLines(lines) {
   const found = new Map();
+  const skipped = new Map(); // registered, not enrolled
   let sectionCode = null;
+  let registered = false; // status of the row being read
 
   // Email (if the list has one) is taken from the same row as the student.
   const add = (studentNo, name, course, email) => {
     name = clean(name).toUpperCase();
-    if (!found.has(studentNo)) found.set(studentNo, { studentNo, name, course: course || '', email: email || '' });
+    const into = registered ? skipped : found;
+    if (!found.has(studentNo) && !skipped.has(studentNo)) into.set(studentNo, { studentNo, name, course: course || '', email: email || '' });
   };
 
   for (const cells of lines) {
+    const rowText = cells.join(' ');
+    registered = REGISTERED.test(rowText) && !ENROLLED.test(rowText);
     if (!sectionCode) sectionCode = cells.find((c) => SECTION.test(c)) || null;
 
     let matched = false;
@@ -79,8 +89,8 @@ export function parseStudentLines(lines) {
     }
   }
 
-  const students = [...found.values()].sort((a, b) => a.name.localeCompare(b.name));
-  return { students, sectionCode };
+  const byName = (a, b) => a.name.localeCompare(b.name);
+  return { students: [...found.values()].sort(byName), sectionCode, registered: [...skipped.values()].sort(byName) };
 }
 
 // Section details from the header of a class record / master list.

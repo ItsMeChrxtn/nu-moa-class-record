@@ -1095,3 +1095,10 @@ button.mark:active { transform: scale(0.92); }
   .sr-items { margin-left: 0; }
   .sr-items li { grid-template-columns: minmax(70px, 1fr) minmax(0, 1fr) 64px; }
 }
+.skipped-list summary { display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.skipped-list summary::-webkit-details-marker { display: none; }
+.skipped-list summary span { text-decoration: underline dotted; text-underline-offset: 3px; }
+.skipped-list[open] summary span { text-decoration: none; }
+.skipped-list ul { display: grid; gap: 4px; margin: 10px 0 0 28px; padding: 0; list-style: none; font-size: 0.84rem; max-height: 160px; overflow: auto; }
+.skipped-list code { font-family: var(--mono); font-size: 0.78rem; margin-right: 6px; }
+.alert.skipped-list { display: block; }

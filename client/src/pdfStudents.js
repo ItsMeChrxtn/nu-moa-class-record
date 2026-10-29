@@ -17,7 +17,7 @@ export async function studentsFromPdf(file) {
     lines.push(...itemsToLines(items));
   }
   await doc.destroy();
-  const { students, sectionCode } = parseStudentLines(lines);
+  const { students, sectionCode, registered } = parseStudentLines(lines);
   if (!info.code && sectionCode) info.code = sectionCode;
-  return { students, info };
+  return { students, info, registered };
 }

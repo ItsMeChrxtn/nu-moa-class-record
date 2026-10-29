@@ -23,16 +23,19 @@ export function StudentImporter({ students, setStudents, onDetails }) {
       const { studentsFromPdf } = await import('./pdfStudents.js');
       let total = 0;
       let merged = students;
+      const notEnrolled = [];
       for (const f of pdfs) {
-        const { students: found, info } = await studentsFromPdf(f);
+        const { students: found, info, registered } = await studentsFromPdf(f);
         total += found.length;
+        notEnrolled.push(...registered);
         if (Object.keys(info).length) onDetails?.(info, f.name);
         const have = new Set(merged.map((s) => s.studentNo));
         merged = [...merged, ...found.filter((s) => !have.has(s.studentNo))];
       }
       setStudents(merged);
-      setFileInfo({ name: pdfs.map((f) => f.name).join(', '), total });
-      if (!total) setError('No students were found in the PDF. Make sure the list has student numbers and names in "LAST, FIRST" format, or add students manually below.');
+      setFileInfo({ name: pdfs.map((f) => f.name).join(', '), total, registered: notEnrolled });
+      if (!total && notEnrolled.length) setError(`All ${notEnrolled.length} students on this list are still "Registered", not enrolled, so none were added.`);
+      else if (!total) setError('No students were found in the PDF. Make sure the list has student numbers and names in "LAST, FIRST" format, or add students manually below.');
     } catch (e) {
       setError(`Could not read the PDF: ${e.message}`);
     } finally {
@@ -74,11 +77,26 @@ export function StudentImporter({ students, setStudents, onDetails }) {
         <span className="dz-icon">{busy ? <span className="spinner" /> : <Icon name="upload" size={22} />}</span>
         <div>
           <strong>{busy ? 'Reading PDF…' : 'Drop the class list (PDF) here'}</strong>
-          <span>{fileInfo ? `${fileInfo.name} · ${fileInfo.total} found` : 'or click to choose a file. It is read in your browser only.'}</span>
+          <span>{fileInfo ? `${fileInfo.name} · ${fileInfo.total} enrolled${fileInfo.registered?.length ? ` · ${fileInfo.registered.length} registered skipped` : ''}` : 'or click to choose a file. It is read in your browser only.'}</span>
         </div>
       </div>
 
       {error && <div className="alert error"><Icon name="alert" />{error}</div>}
+      {fileInfo?.registered?.length > 0 && fileInfo.total > 0 && (
+        <details className="alert info skipped-list">
+          <summary>
+            <Icon name="info" />
+            <span>
+              <strong>{fileInfo.registered.length}</strong> student{fileInfo.registered.length === 1 ? ' is' : 's are'} only <strong>Registered</strong>, not enrolled, so they were not added. Show
+            </span>
+          </summary>
+          <ul>
+            {fileInfo.registered.map((s) => (
+              <li key={s.studentNo}><code>{s.studentNo}</code> {s.name}</li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       <div className="roster">
         <div className="roster-head">
