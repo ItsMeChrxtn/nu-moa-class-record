@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, COMPONENTS, gradeBreakdown, schedule, termOf } from '../api.js';
+import { api, COMPONENTS, gradeBreakdown, schedule, termOf, track } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { EmptyState, ErrorState, Hero, Icon, PageLoader, Ring, displayName, eqTone, firstName, titleCase, useUI } from '../ui.jsx';
 import { downloadCertificate } from '../certificate.js';
@@ -249,7 +249,8 @@ function Certificates({ record, user, finalsOpen }) {
   const get = async (term) => {
     setBusy(term);
     try {
-      await downloadCertificate(record, user, term);
+      await track('Making your certificate…', () => downloadCertificate(record, user, term));
+      toast(`Your ${term === 'MID' ? 'midterm' : 'final'} grade certificate was downloaded.`, 'success', 'Certificate ready!');
     } catch {
       toast('The certificate could not be made. Please try again.', 'error');
     }

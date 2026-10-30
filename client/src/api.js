@@ -1,17 +1,75 @@
-export async function api(path, { method = 'GET', body } = {}) {
-  const res = await fetch(`/api${path}`, {
-    method,
-    credentials: 'same-origin',
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error(data.error || `Request failed (${res.status})`);
-    err.status = res.status;
-    throw err;
+// Saves, updates, deletes and downloads announce themselves here so the app can show its loading
+// bar: 'start' { id, label }, 'progress' { id, value 0–1 }, 'end' { id, ok }. Quick, frequent saves
+// (a score cell, an attendance mark, the bonus) and signing in stay silent.
+export const activity = new EventTarget();
+const QUIET = [/\/scores$/, /\/attendance\/marks$/, /^\/auth\//, /^\/me\/notifications/];
+const LABEL = { POST: 'Saving', PUT: 'Saving', PATCH: 'Updating', DELETE: 'Deleting' };
+let nextId = 0;
+const emit = (type, detail) => activity.dispatchEvent(new CustomEvent(type, { detail }));
+
+export async function api(path, { method = 'GET', body, label } = {}) {
+  const loud = method !== 'GET' && !QUIET.some((re) => re.test(path));
+  const id = ++nextId;
+  if (loud) emit('start', { id, label: label || `${LABEL[method] || 'Working'}…` });
+  let ok = false;
+  try {
+    const res = await fetch(`/api${path}`, {
+      method,
+      credentials: 'same-origin',
+      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.error || `Request failed (${res.status})`);
+      err.status = res.status;
+      throw err;
+    }
+    ok = true;
+    return data;
+  } finally {
+    if (loud) emit('end', { id, ok });
   }
-  return data;
+}
+
+// Long work done in the browser (e.g. making a PDF certificate), shown with the same loading bar.
+export async function track(label, work) {
+  const id = ++nextId;
+  emit('start', { id, label });
+  let ok = false;
+  try {
+    const result = await work();
+    ok = true;
+    return result;
+  } finally {
+    emit('end', { id, ok });
+  }
+}
+
+// Reads a response body, reporting how much has arrived (when the size is known).
+async function readWithProgress(res, onProgress) {
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!total || !res.body?.getReader) return res.blob();
+  const reader = res.body.getReader();
+  const chunks = [];
+  let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    got += value.length;
+    onProgress(Math.min(1, got / total));
+  }
+  return new Blob(chunks, { type: res.headers.get('content-type') || '' });
+}
+
+export function saveBlob(blob, name) {
+  const href = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href, download: name });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 10000);
 }
 
 export const COMPONENTS = [
@@ -27,22 +85,25 @@ export const TERM_COMPONENTS = { MID: ['CP', 'EA', 'MPT'], POST: ['CP', 'EA', 'C
 // Downloads a file from the API (e.g. an Excel export) and saves it under the server's file name.
 // Resolves to that name; rejects with the server's error message.
 export async function downloadFile(url) {
-  const res = await fetch(url, { credentials: 'same-origin' });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `Download failed (${res.status})`);
+  const id = ++nextId;
+  emit('start', { id, label: 'Preparing your file…' });
+  let ok = false;
+  try {
+    const res = await fetch(url, { credentials: 'same-origin' });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Download failed (${res.status})`);
+    }
+    const cd = res.headers.get('content-disposition') || '';
+    const star = cd.match(/filename\*=UTF-8''([^;]+)/i);
+    const plain = cd.match(/filename="?([^";]+)"?/i);
+    const name = star ? decodeURIComponent(star[1]) : plain ? plain[1] : 'download.xlsx';
+    saveBlob(await readWithProgress(res, (value) => emit('progress', { id, value })), name);
+    ok = true;
+    return name;
+  } finally {
+    emit('end', { id, ok });
   }
-  const cd = res.headers.get('content-disposition') || '';
-  const star = cd.match(/filename\*=UTF-8''([^;]+)/i);
-  const plain = cd.match(/filename="?([^";]+)"?/i);
-  const name = star ? decodeURIComponent(star[1]) : plain ? plain[1] : 'download.xlsx';
-  const href = URL.createObjectURL(await res.blob());
-  const a = Object.assign(document.createElement('a'), { href, download: name });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(href), 10000);
-  return name;
 }
 
 // How a student's grade adds up, per component (same rules as the server):

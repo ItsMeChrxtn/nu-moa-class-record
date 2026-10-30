@@ -130,6 +130,43 @@ export const Section = model('Section', sectionSchema);
 export const Enrollment = model('Enrollment', enrollmentSchema);
 export const AuditLog = model('AuditLog', auditSchema);
 
+// A student's notice that a section's midterm or final grades can now be seen. One per student,
+// section and kind, so publishing again (or adding more items) never repeats it.
+const notificationSchema = new Schema(
+  {
+    student: { type: Schema.Types.ObjectId, ref: 'Student', required: true },
+    section: { type: Schema.Types.ObjectId, ref: 'Section', required: true },
+    kind: { type: String, enum: ['midterm', 'final'], required: true },
+    readAt: Date,
+  },
+  { timestamps: { createdAt: true, updatedAt: false } }
+);
+notificationSchema.index({ student: 1, section: 1, kind: 1 }, { unique: true });
+notificationSchema.index({ student: 1, createdAt: -1 });
+export const Notification = model('Notification', notificationSchema);
+
+// Tell every student in a published section which grades they can now see: the midterm once the
+// section has midterm items, the final once it has finals items (MPT counts as midterms, CPT as finals).
+export async function notifyGrades(section) {
+  if (!section.published) return 0;
+  const items = section.items || [];
+  const finals = items.some((i) => i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST'));
+  const midterm = items.some((i) => !(i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST')));
+  const kinds = [midterm && 'midterm', finals && 'final'].filter(Boolean);
+  if (!kinds.length) return 0;
+  const enrollments = await Enrollment.find({ section: section._id }, 'student');
+  const docs = enrollments.flatMap((e) => kinds.map((kind) => ({ student: e.student, section: section._id, kind })));
+  if (!docs.length) return 0;
+  try {
+    const r = await Notification.insertMany(docs, { ordered: false });
+    return r.length;
+  } catch (e) {
+    // Duplicates (already notified) are expected; anything else is logged.
+    if (e.code !== 11000 && !e.writeErrors) console.error('notify failed:', e.message);
+    return e.insertedDocs?.length || 0;
+  }
+}
+
 export function audit(user, action, target, detail) {
   return AuditLog.create({
     actor: user?._id,

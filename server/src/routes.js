@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
-import { User, Student, Section, Enrollment, audit } from './models.js';
+import { User, Student, Section, Enrollment, Notification, audit, notifyGrades } from './models.js';
 import { COMPONENTS, MARKS, attendanceItems, cleanScale, computeGrades, scaleOf } from './grading.js';
 import { saveCredentials } from './credentials.js';
 import { HHMM_RE as HHMM, blocksOutside, cleanBlocks, cleanSchedule, legacyFields, workHoursOf } from './schedule.js';
@@ -98,6 +98,38 @@ router.get(
         };
       });
     res.json({ records });
+  })
+);
+
+// Student notices: "your midterm / final grades for ACT264 are now available".
+router.get(
+  '/me/notifications',
+  requireAuth,
+  requirePasswordSet,
+  requireRole('student'),
+  wrap(async (req, res) => {
+    const list = await Notification.find({ student: req.user.student }).sort({ createdAt: -1 }).limit(30).populate('section', 'code subjectCode subjectTitle term academicYear published');
+    res.json({
+      notifications: list
+        .filter((n) => n.section?.published) // a section hidden again drops out
+        .map((n) => ({
+          id: n._id,
+          kind: n.kind,
+          at: n.createdAt,
+          read: !!n.readAt,
+          section: { id: n.section._id, code: n.section.code, subjectCode: n.section.subjectCode, subjectTitle: n.section.subjectTitle, term: n.section.term, academicYear: n.section.academicYear },
+        })),
+    });
+  })
+);
+router.post(
+  '/me/notifications/read',
+  requireAuth,
+  requirePasswordSet,
+  requireRole('student'),
+  wrap(async (req, res) => {
+    await Notification.updateMany({ student: req.user.student, readAt: null }, { $set: { readAt: new Date() } });
+    res.json({ ok: true });
   })
 );
 
@@ -222,6 +254,7 @@ faculty.patch(
         return res.status(409).json({ error: `${req.section.code} already exists for ${req.section.term} ${req.section.academicYear}.` });
       throw e;
     }
+    if (published === true) await notifyGrades(req.section);
     res.json(await sectionDetail(req.section));
   })
 );
@@ -237,6 +270,7 @@ faculty.post(
     const term = component === 'MPT' ? 'MID' : component === 'CPT' ? 'POST' : period === 'POST' ? 'POST' : 'MID';
     req.section.items.push({ component, period: term, label, max: Number(max) });
     await req.section.save();
+    await notifyGrades(req.section); // e.g. the first finals item of a published section
     res.json(await sectionDetail(req.section));
   })
 );

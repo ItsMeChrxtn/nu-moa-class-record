@@ -1,5 +1,6 @@
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth.jsx';
+import NotificationBell from './Notifications.jsx';
 import { Avatar, BrandMark, Icon, titleCase } from './ui.jsx';
 
 export default function Layout() {
@@ -18,6 +19,7 @@ export default function Layout() {
           </Link>
           {user && (
             <div className="topbar-user">
+              {user.role === 'student' && !user.mustChangePassword && <NotificationBell />}
               <div className="user-pill">
                 <Avatar name={user.name} size={32} />
                 <span className="user-meta hide-sm">

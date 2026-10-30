@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { activity } from './api.js';
+import { ProgressOverlay, SweetAlert } from './Feedback.jsx';
 
 const paths = {
   logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
@@ -40,6 +42,7 @@ const paths = {
   more: <><circle cx="12" cy="5" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="19" r="1" /></>,
   chevronDown: <path d="m6 9 6 6 6-6" />,
   settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>,
+  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></>,
   sparkle:<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8" />,
 };
 
@@ -397,14 +400,85 @@ export function Modal({ title, subtitle, icon, tone = 'brand', onClose, children
 
 const UIContext = createContext(null);
 
-export function UIProvider({ children }) {
-  const [toasts, setToasts] = useState([]);
-  const [dialog, setDialog] = useState(null);
+const MIN_RUN = 900; // ms the runners get before reaching 100%
+const CELEBRATE = 1300; // ms of celebrating at 100%
+const ALERT_MS = 2200; // a success popup closes itself after this
 
-  const toast = useCallback((message, type = 'success') => {
-    const id = Math.random();
-    setToasts((t) => [...t, { id, message, type }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3800);
+export function UIProvider({ children }) {
+  const [alerts, setAlerts] = useState([]); // sweet-alert popups, shown one at a time
+  const [dialog, setDialog] = useState(null);
+  const [progress, setProgress] = useState(null); // { label, value, done }
+  const run = useRef({ active: new Map(), shownAt: 0, failed: false, timer: null });
+
+  // toast(message, 'success' | 'error' | 'info', title?) shows a popup once any loading bar is finished.
+  const toast = useCallback((message, type = 'success', title) => {
+    setAlerts((a) => [...a, { id: Math.random(), message, type, title, duration: ALERT_MS }]);
+  }, []);
+  const closeAlert = useCallback(() => setAlerts((a) => a.slice(1)), []);
+  const current = !progress && alerts[0];
+  useEffect(() => {
+    if (!current || current.type !== 'success') return;
+    const t = setTimeout(closeAlert, current.duration);
+    return () => clearTimeout(t);
+  }, [current, closeAlert]);
+
+  // Loading bar: follows every save / delete / download announced by api.js.
+  useEffect(() => {
+    let alive = true;
+    const st = run.current;
+    const tick = () => {
+      setProgress((p) => {
+        if (!p || p.done) return p;
+        const real = Math.max(0, ...[...st.active.values()].map((x) => x.value || 0));
+        // Ease towards 90% while waiting; real download progress can push it further.
+        const eased = p.value + (0.9 - p.value) * 0.09;
+        return { ...p, value: Math.min(0.97, Math.max(eased, real * 0.97)) };
+      });
+    };
+    const finish = () => {
+      const wait = Math.max(0, MIN_RUN - (Date.now() - st.shownAt));
+      setTimeout(() => {
+        if (!alive || st.active.size) return; // something new started meanwhile
+        clearInterval(st.timer);
+        st.timer = null;
+        if (st.failed) {
+          setProgress(null);
+          return;
+        }
+        setProgress((p) => p && { ...p, value: 1, done: true });
+        setTimeout(() => alive && !st.active.size && setProgress(null), CELEBRATE);
+      }, wait);
+    };
+    const onStart = (e) => {
+      const { id, label } = e.detail;
+      if (!st.active.size && !st.timer) {
+        st.shownAt = Date.now();
+        st.failed = false;
+        setProgress({ label, value: 0.04, done: false });
+        st.timer = setInterval(tick, 90);
+      } else setProgress((p) => (p ? { ...p, label, done: false } : { label, value: 0.04, done: false }));
+      st.active.set(id, { value: 0 });
+    };
+    const onProgress = (e) => {
+      const x = st.active.get(e.detail.id);
+      if (x) x.value = e.detail.value;
+    };
+    const onEnd = (e) => {
+      st.active.delete(e.detail.id);
+      if (!e.detail.ok) st.failed = true;
+      if (!st.active.size) finish();
+    };
+    activity.addEventListener('start', onStart);
+    activity.addEventListener('progress', onProgress);
+    activity.addEventListener('end', onEnd);
+    return () => {
+      alive = false;
+      clearInterval(st.timer);
+      st.timer = null;
+      activity.removeEventListener('start', onStart);
+      activity.removeEventListener('progress', onProgress);
+      activity.removeEventListener('end', onEnd);
+    };
   }, []);
 
   const confirm = useCallback((opts) => new Promise((resolve) => setDialog({ ...opts, resolve })), []);
@@ -417,14 +491,8 @@ export function UIProvider({ children }) {
   return (
     <UIContext.Provider value={{ toast, confirm }}>
       {children}
-      <div className="toasts" aria-live="polite">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast ${t.type}`}>
-            <Icon name={t.type === 'error' ? 'alert' : 'check'} />
-            <span>{t.message}</span>
-          </div>
-        ))}
-      </div>
+      {progress && <ProgressOverlay progress={progress} />}
+      {current && <SweetAlert key={current.id} alert={current} onClose={closeAlert} />}
       {dialog && <ConfirmDialog dialog={dialog} close={close} />}
     </UIContext.Provider>
   );
@@ -434,35 +502,41 @@ export function UIProvider({ children }) {
 function ConfirmDialog({ dialog, close }) {
   const [typed, setTyped] = useState('');
   const locked = dialog.requireText && typed.trim().toUpperCase() !== dialog.requireText.toUpperCase();
+  useEffect(() => {
+    const esc = (e) => e.key === 'Escape' && close(false);
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [close]);
   return (
-    <Modal
-      title={dialog.title}
-      icon={dialog.danger ? 'alert' : 'info'}
-      tone={dialog.danger ? 'bad' : 'brand'}
-      onClose={() => close(false)}
-      width={440}
-      footer={
-        <>
-          <button className="btn" onClick={() => close(false)}>Cancel</button>
-          <button className={`btn ${dialog.danger ? 'danger' : 'primary'}`} onClick={() => close(true)} disabled={locked} autoFocus={!dialog.requireText}>
+    <div className="swal-backdrop" onClick={() => close(false)}>
+      <div className={`swal ${dialog.danger ? 'swal-warning' : 'swal-question'}`} role="alertdialog" aria-modal="true" aria-label={dialog.title} onClick={(e) => e.stopPropagation()}>
+        <div className={`swal-icon ${dialog.danger ? 'swal-icon-warning' : 'swal-icon-question'}`} aria-hidden="true">
+          <svg viewBox="0 0 52 52">
+            <circle className="swal-ring" cx="26" cy="26" r="24" />
+            {dialog.danger ? <path className="swal-check" d="M26 14 L26 30 M26 37 L26 38" /> : <path className="swal-check" d="M20 20 Q20 14 26 14 Q32 14 32 20 Q32 25 26 27 L26 31 M26 37 L26 38" />}
+          </svg>
+        </div>
+        <h2>{dialog.title}</h2>
+        {dialog.message && <p>{dialog.message}</p>}
+        {dialog.requireText && (
+          <label className="field swal-field">
+            <span>Type <code>{dialog.requireText}</code> to confirm</span>
+            <input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !locked && close(true)}
+              autoFocus
+            />
+          </label>
+        )}
+        <div className="swal-actions">
+          <button type="button" className="btn" onClick={() => close(false)}>Cancel</button>
+          <button type="button" className={`btn ${dialog.danger ? 'danger' : 'primary'}`} onClick={() => close(true)} disabled={locked} autoFocus={!dialog.requireText}>
             {dialog.confirmLabel || 'Continue'}
           </button>
-        </>
-      }
-    >
-      <p className="dialog-msg">{dialog.message}</p>
-      {dialog.requireText && (
-        <label className="field">
-          <span>Type <code>{dialog.requireText}</code> to confirm</span>
-          <input
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !locked && close(true)}
-            autoFocus
-          />
-        </label>
-      )}
-    </Modal>
+        </div>
+      </div>
+    </div>
   );
 }
 
