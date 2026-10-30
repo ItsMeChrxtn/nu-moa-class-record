@@ -116,7 +116,7 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel,
           </button>
           {onExport && (
             <button className="btn primary" onClick={onExport}>
-              <Icon name="download" size={16} /> Loading report
+              <Icon name="download" size={16} /> Schedule files
             </button>
           )}
         </div>
@@ -467,8 +467,9 @@ export function LoadingReportModal({ term, onClose }) {
   }, []);
   const set = (k) => (e) => setDetails({ ...details, [k]: e.target.value });
 
-  async function download() {
-    setBusy(true);
+  // what: 'both' (ZIP), 'loading' (Faculty Loading Report) or 'week' (Work Week Schedule).
+  async function download(what) {
+    setBusy(what);
     setError('');
     try {
       // A position left on its default is saved as the one the dropdown shows.
@@ -477,28 +478,29 @@ export function LoadingReportModal({ term, onClose }) {
       for (const [k, , usual] of SIGNERS) filled[`${k}Title`] = matchPosition(filled[`${k}Title`], options) || filled[`${k}Title`] || options.find((o) => o.startsWith(usual)) || usual;
       setDetails(filled);
       await api('/faculty/loading-report/details', { method: 'PUT', body: { details: filled } });
-      const name = await downloadFile(`/api/faculty/loading-report?${new URLSearchParams({ academicYear: term?.academicYear || '', term: term?.term || '' })}`);
+      const path = { both: 'schedule-files', loading: 'loading-report', week: 'workweek' }[what];
+      const name = await downloadFile(`/api/faculty/${path}?${new URLSearchParams({ academicYear: term?.academicYear || '', term: term?.term || '' })}`);
       toast(`Downloaded ${name}`);
       onClose();
     } catch (e) {
       setError(e.message);
     } finally {
-      setBusy(false);
+      setBusy('');
     }
   }
 
   return (
     <Modal
-      title="Faculty loading report"
-      subtitle={`Your classes${term?.label ? ` for ${term.label}` : ''}, admin/consultation hours and totals, in the school's loading report format (Excel). These details are saved for next time.`}
+      title="Schedule files"
+      subtitle={`The Faculty Loading Report and the Work Week Schedule${term?.label ? ` for ${term.label}` : ''}, in the school's Excel formats, from your classes and time blocks. These details are saved for next time.`}
       icon="download"
       onClose={onClose}
       width={620}
       footer={
         <>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" disabled={busy || !details} onClick={download}>
-            {busy ? <span className="spinner sm" /> : <Icon name="download" size={16} />} {busy ? 'Preparing…' : 'Download Excel'}
+          <button className="btn primary" disabled={!!busy || !details} onClick={() => download('both')}>
+            {busy === 'both' ? <span className="spinner sm" /> : <Icon name="download" size={16} />} {busy === 'both' ? 'Preparing…' : 'Download both (ZIP)'}
           </button>
         </>
       }
@@ -544,9 +546,31 @@ export function LoadingReportModal({ term, onClose }) {
               ))}
             </div>
           </div>
+          <div className="file-picks">
+            <div className="file-pick">
+              <span className="file-pick-icon"><Icon name="list" size={18} /></span>
+              <span className="file-pick-text">
+                <strong>Faculty Loading Report</strong>
+                <small>One row per class meeting with LEC/LAB, room, mode, units and hours; admin/consultation hours; signatories.</small>
+              </span>
+              <button type="button" className="btn" disabled={!!busy} onClick={() => download('loading')}>
+                {busy === 'loading' ? <span className="spinner sm" /> : <Icon name="download" size={15} />} Only this
+              </button>
+            </div>
+            <div className="file-pick">
+              <span className="file-pick-icon"><Icon name="calendar" size={18} /></span>
+              <span className="file-pick-text">
+                <strong>Work Week Schedule</strong>
+                <small>Monday–Saturday in 20-minute rows: face-to-face (green), remote (blue), admin hours (yellow), breaks and day off.</small>
+              </span>
+              <button type="button" className="btn" disabled={!!busy} onClick={() => download('week')}>
+                {busy === 'week' ? <span className="spinner sm" /> : <Icon name="download" size={15} />} Only this
+              </button>
+            </div>
+          </div>
           <p className="muted small">
-            Each class meeting becomes one row: subject, section, day, time, LEC/LAB, room and mode come from the section&apos;s schedule (set LEC/LAB and
-            mode in <strong>Section details</strong>). Admin/consultation blocks fill in the consultation and administration hours; break time is left out.
+            LEC/LAB, room and mode come from each section&apos;s schedule (set them in <strong>Section details</strong>; an ONLINE class is remote in the
+            work week). Break time is shown on the work week but never counted.
           </p>
           {error && <div className="alert error"><Icon name="alert" />{error}</div>}
         </div>

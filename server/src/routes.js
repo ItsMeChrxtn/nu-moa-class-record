@@ -9,6 +9,8 @@ import { HHMM_RE as HHMM, blocksOutside, cleanBlocks, cleanSchedule, legacyField
 import { mailConfigured, sendStudentCredentials } from './mailer.js';
 import { buildClassRecord, facultyTerms, gradingFileName } from './classRecordExport.js';
 import { PROFILE_FIELDS, buildLoadingReport, loadingFileName } from './facultyLoading.js';
+import { buildWorkWeek, workWeekFileName } from './workWeek.js';
+import JSZip from 'jszip';
 import admin from './admin.js';
 import {
   clearSession,
@@ -546,20 +548,56 @@ faculty.put(
   })
 );
 
-// Faculty Loading Report for one term (?academicYear=&term=; default: the latest term), from the school's template.
+// One term's sections (?academicYear=&term=; default: the latest term) for the schedule files.
+async function termSections(req) {
+  const t = req.query.academicYear !== undefined || req.query.term !== undefined ? { academicYear: req.query.academicYear, term: req.query.term } : (await facultyTerms(req.user))[0] || {};
+  const filter = { academicYear: String(t.academicYear ?? ''), term: String(t.term ?? '') };
+  const sections = await Section.find({ faculty: req.user._id, academicYear: filter.academicYear || { $in: ['', null] }, term: filter.term || { $in: ['', null] } });
+  return { filter, sections };
+}
+function sendFile(res, name, type, buffer) {
+  res.setHeader('Content-Type', type);
+  res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`);
+  res.send(buffer);
+}
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const scheduleArgs = (req, sections, filter) => [req.user, sections, req.user.scheduleBlocks || [], req.user.loadingReport || {}, filter];
+
+// Faculty Loading Report for one term, from the school's template.
 faculty.get(
   '/loading-report',
   wrap(async (req, res) => {
-    const t = req.query.academicYear !== undefined || req.query.term !== undefined ? { academicYear: req.query.academicYear, term: req.query.term } : (await facultyTerms(req.user))[0] || {};
-    const filter = { academicYear: String(t.academicYear ?? ''), term: String(t.term ?? '') };
-    const query = { faculty: req.user._id, academicYear: filter.academicYear || { $in: ['', null] }, term: filter.term || { $in: ['', null] } };
-    const sections = await Section.find(query);
+    const { filter, sections } = await termSections(req);
     if (!sections.length) return res.status(404).json({ error: 'No sections for that term.' });
-    const { buffer } = await buildLoadingReport(req.user, sections, req.user.scheduleBlocks || [], req.user.loadingReport || {}, filter);
-    const name = loadingFileName(req.user, filter.term, filter.academicYear);
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`);
-    res.send(buffer);
+    const { buffer } = await buildLoadingReport(...scheduleArgs(req, sections, filter));
+    sendFile(res, loadingFileName(req.user, filter.term, filter.academicYear), XLSX, buffer);
+  })
+);
+
+// Work Week Schedule for one term, from the school's template.
+faculty.get(
+  '/workweek',
+  wrap(async (req, res) => {
+    const { filter, sections } = await termSections(req);
+    if (!sections.length) return res.status(404).json({ error: 'No sections for that term.' });
+    const { buffer } = await buildWorkWeek(...scheduleArgs(req, sections, filter));
+    sendFile(res, workWeekFileName(req.user, filter.term, filter.academicYear), XLSX, buffer);
+  })
+);
+
+// Both schedule files in one download (ZIP): the Faculty Loading Report and the Work Week Schedule.
+faculty.get(
+  '/schedule-files',
+  wrap(async (req, res) => {
+    const { filter, sections } = await termSections(req);
+    if (!sections.length) return res.status(404).json({ error: 'No sections for that term.' });
+    const [loading, week] = await Promise.all([buildLoadingReport(...scheduleArgs(req, sections, filter)), buildWorkWeek(...scheduleArgs(req, sections, filter))]);
+    const loadingName = loadingFileName(req.user, filter.term, filter.academicYear);
+    const zip = new JSZip();
+    zip.file(loadingName, loading.buffer);
+    zip.file(workWeekFileName(req.user, filter.term, filter.academicYear), week.buffer);
+    const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+    sendFile(res, loadingName.replace(/_STUDENT-CLASS-SCHEDULES\.xlsx$/, '_SCHEDULES.zip'), 'application/zip', buffer);
   })
 );
 

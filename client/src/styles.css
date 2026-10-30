@@ -1195,3 +1195,13 @@ button.mark:active { transform: scale(0.92); }
 .signer { grid-template-columns: 96px minmax(0, 0.75fr) minmax(0, 1.45fr); }
 .fixed-value { height: auto; min-height: 44px; font-size: 0.84rem; line-height: 1.25; }
 @media (max-width: 680px) { .signer { grid-template-columns: 1fr; } }
+
+/* Schedule files window */
+.file-picks { display: grid; gap: 8px; }
+.file-pick { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.file-pick-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: var(--blue-soft); color: var(--blue); }
+.file-pick-text { display: grid; gap: 2px; min-width: 0; }
+.file-pick-text strong { font-size: 0.9rem; }
+.file-pick-text small { font-size: 0.76rem; color: var(--ink-2); line-height: 1.35; }
+.file-pick .btn { height: 36px; padding: 0 12px; font-size: 0.8rem; }
+@media (max-width: 560px) { .file-pick { grid-template-columns: auto minmax(0, 1fr); } .file-pick .btn { grid-column: 1 / -1; justify-content: center; } }

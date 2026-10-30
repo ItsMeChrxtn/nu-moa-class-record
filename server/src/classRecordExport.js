@@ -72,7 +72,7 @@ export class SheetXml {
     const [, col, rs] = ref.match(/^([A-Z]+)(\d+)$/);
     const r = Number(rs);
     const row = this.row(r);
-    const s = this.styleOf(col, r);
+    const s = opts.style ?? this.styleOf(col, r); // opts.style: use this cell style instead of the current one
     const sa = s ? ` s="${s}"` : '';
     let xml;
     if (value === '' && opts.text) xml = `<c r="${ref}"${sa} t="inlineStr"><is><t></t></is></c>`;
@@ -81,6 +81,11 @@ export class SheetXml {
     else xml = `<c r="${ref}"${sa} t="inlineStr"><is><t xml:space="preserve">${esc(value)}</t></is></c>`;
     row.cells.set(col, xml);
     row.attrs = row.attrs.replace(/\sspans="[^"]*"/, ''); // spans is only a hint; drop it once cells change
+  }
+  // Take a cell out completely (value and style).
+  remove(ref) {
+    const [, col, rs] = ref.match(/^([A-Z]+)(\d+)$/);
+    this.rows.get(Number(rs))?.cells.delete(col);
   }
   hideRow(r) {
     const row = this.row(r);
