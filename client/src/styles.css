@@ -1189,3 +1189,9 @@ button.mark:active { transform: scale(0.92); }
 .work-in-out { padding-right: 14px; border-right: 1px solid var(--line-2); }
 .work-in-out .icon { color: var(--blue); }
 .work-in-out .link-btn { margin-left: 4px; font-size: 0.72rem; color: var(--blue); }
+.position-select { display: grid; gap: 6px; min-width: 0; }
+.position-select select, .position-select input { width: 100%; min-width: 0; }
+.fixed-value { display: flex; align-items: center; height: 44px; padding: 0 12px; border-radius: 10px; border: 1px dashed var(--line-2); background: var(--bg); font-size: 0.9rem; font-weight: 600; color: var(--ink-2); }
+.signer { grid-template-columns: 96px minmax(0, 0.75fr) minmax(0, 1.45fr); }
+.fixed-value { height: auto; min-height: 44px; font-size: 0.84rem; line-height: 1.25; }
+@media (max-width: 680px) { .signer { grid-template-columns: 1fr; } }

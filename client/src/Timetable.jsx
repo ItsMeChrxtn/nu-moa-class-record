@@ -403,16 +403,56 @@ function BlockModal({ block, kind = 'work', workHours = DEFAULT_WORK_HOURS, onSa
   );
 }
 
-const REPORT_FIELDS = [
-  ['employeeId', 'Employee ID', 'e.g. 00-00000'],
-  ['classification', 'Classification', 'e.g. Full Time Probationary'],
-  ['department', 'School / department', 'e.g. School of Information Technology'],
-];
+const CLASSIFICATIONS = ['Full Time Probationary', 'Full Time Regular', 'Part Time'];
+// Every loading report is for this school.
+const DEPARTMENT = 'School of Information Technology';
+// [field, label, usual position]
 const SIGNERS = [
-  ['checkedBy', 'Checked by', 'Program Chair, School of Information Technology'],
-  ['endorsedBy', 'Endorsed by', 'Dean, School of Information Technology'],
+  ['checkedBy', 'Checked by', 'Program Chair'],
+  ['endorsedBy', 'Endorsed by', 'Dean'],
   ['approvedBy', 'Approved by', 'Academic Director'],
 ];
+// Positions offered in the dropdown. Positions that belong to a school get the school added
+// ("Program Chair, School of Information Technology"), like the printed report.
+const SCHOOL_POSITIONS = ['Program Chair', 'Associate Dean', 'Dean'];
+const OTHER_POSITIONS = ['Academic Director', 'Department Chair', 'School Director', 'Executive Director', 'Vice President for Academic Affairs', 'Campus Director'];
+const positionsFor = (department) => [
+  ...SCHOOL_POSITIONS.map((p) => (department?.trim() ? `${p}, ${department.trim()}` : p)),
+  ...OTHER_POSITIONS,
+];
+const OTHER = '__other__';
+// The dropdown choice a saved position stands for ("Program Chair" -> "Program Chair, School of …").
+const matchPosition = (value, options) => options.find((o) => o === value) || options.find((o) => value && o.split(',')[0] === value);
+
+// A position dropdown with an "Other" choice that opens a text box.
+function PositionSelect({ value, onChange, options, usual, label }) {
+  const [typing, setTyping] = useState(() => !!value && !matchPosition(value, options));
+  // Empty: the usual position for this signatory (as the template prints it).
+  const shown = matchPosition(value, options) || options.find((o) => o.startsWith(usual)) || '';
+  return (
+    <span className="position-select">
+      <select
+        value={typing ? OTHER : shown}
+        onChange={(e) => {
+          if (e.target.value === OTHER) {
+            setTyping(true);
+            onChange('');
+          } else {
+            setTyping(false);
+            onChange(e.target.value);
+          }
+        }}
+        aria-label={`${label} position`}
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>{o}</option>
+        ))}
+        <option value={OTHER}>Other (type it)…</option>
+      </select>
+      {typing && <input value={value} maxLength={80} placeholder="Type the position" onChange={(e) => onChange(e.target.value)} aria-label={`${label} position (other)`} autoFocus />}
+    </span>
+  );
+}
 
 // Faculty Loading Report: the details printed on it are saved once, then the Excel file is made.
 export function LoadingReportModal({ term, onClose }) {
@@ -431,7 +471,12 @@ export function LoadingReportModal({ term, onClose }) {
     setBusy(true);
     setError('');
     try {
-      await api('/faculty/loading-report/details', { method: 'PUT', body: { details } });
+      // A position left on its default is saved as the one the dropdown shows.
+      const filled = { ...details, department: DEPARTMENT };
+      const options = positionsFor(DEPARTMENT);
+      for (const [k, , usual] of SIGNERS) filled[`${k}Title`] = matchPosition(filled[`${k}Title`], options) || filled[`${k}Title`] || options.find((o) => o.startsWith(usual)) || usual;
+      setDetails(filled);
+      await api('/faculty/loading-report/details', { method: 'PUT', body: { details: filled } });
       const name = await downloadFile(`/api/faculty/loading-report?${new URLSearchParams({ academicYear: term?.academicYear || '', term: term?.term || '' })}`);
       toast(`Downloaded ${name}`);
       onClose();
@@ -463,21 +508,38 @@ export function LoadingReportModal({ term, onClose }) {
       ) : (
         <div style={{ display: 'grid', gap: 16 }}>
           <div className="row-3 report-row">
-            {REPORT_FIELDS.map(([k, label, ph]) => (
-              <label key={k} className="field">
-                <span>{label}</span>
-                <input value={details[k] || ''} maxLength={80} placeholder={ph} onChange={set(k)} />
-              </label>
-            ))}
+            <label className="field">
+              <span>Employee ID</span>
+              <input value={details.employeeId || ''} maxLength={80} placeholder="e.g. 00-00000" onChange={set('employeeId')} />
+            </label>
+            <label className="field">
+              <span>Classification</span>
+              <select value={CLASSIFICATIONS.find((c) => c.toLowerCase() === (details.classification || '').toLowerCase()) || ''} onChange={set('classification')}>
+                <option value="" disabled>Choose…</option>
+                {CLASSIFICATIONS.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+            <div className="field">
+              <span className="field-label">School / department</span>
+              <div className="fixed-value">{DEPARTMENT}</div>
+            </div>
           </div>
           <div className="field">
             <span className="field-label">Signatories</span>
             <div className="signers">
-              {SIGNERS.map(([k, label, titlePh]) => (
+              {SIGNERS.map(([k, label, usual]) => (
                 <div key={k} className="signer">
                   <strong>{label}</strong>
                   <input value={details[k] || ''} maxLength={80} placeholder="Name" onChange={set(k)} aria-label={`${label} name`} />
-                  <input value={details[`${k}Title`] || ''} maxLength={80} placeholder={titlePh} onChange={set(`${k}Title`)} aria-label={`${label} position`} />
+                  <PositionSelect
+                    label={label}
+                    usual={usual}
+                    options={positionsFor(DEPARTMENT)}
+                    value={details[`${k}Title`] || ''}
+                    onChange={(v) => setDetails((d) => ({ ...d, [`${k}Title`]: v }))}
+                  />
                 </div>
               ))}
             </div>
