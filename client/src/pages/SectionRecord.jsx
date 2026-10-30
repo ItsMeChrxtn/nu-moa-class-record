@@ -5,7 +5,7 @@ import { AddStudentsModal, ImportResultModal, deleteSection } from '../Roster.js
 import { EditSectionModal } from '../SectionForm.jsx';
 import { ACCOUNT_LABEL, StudentAccountsModal } from '../StudentAccounts.jsx';
 import { AttendanceView } from '../Attendance.jsx';
-import { Avatar, EmptyState, EqBadge, ErrorState, Hero, Icon, Menu, Modal, PageLoader, Stat, titleCase, useUI } from '../ui.jsx';
+import { Avatar, DownloadButton, EmptyState, EqBadge, ErrorState, Hero, Icon, Menu, Modal, PageLoader, Stat, titleCase, useUI } from '../ui.jsx';
 
 const SCALE = ['4.0', '3.5', '3.0', '2.5', '2.0', '1.5', '1.0', 'R'];
 const PASS_SCALE = ['Pass', 'Repeat'];
@@ -165,9 +165,9 @@ export default function SectionRecord() {
               <span className="switch-track" />
               <span>{section.published ? 'Visible to students' : 'Hidden from students'}</span>
             </label>
-            <a className="btn" href={`/api/faculty/export?section=${encodeURIComponent(id)}`} download title="This section's grading sheet in the class record format">
-              <Icon name="download" size={16} /> Export
-            </a>
+            <DownloadButton url={`/api/faculty/export?section=${encodeURIComponent(id)}`} title="This section's grading sheet in the class record format">
+              Export
+            </DownloadButton>
             <Menu
               label="Manage"
               icon="settings"

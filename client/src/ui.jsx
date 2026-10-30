@@ -125,6 +125,73 @@ export function Stat({ icon, label, value, sub, tone }) {
   );
 }
 
+// A button that downloads a file and shows that it is working ("Preparing…") until the file is saved.
+export function DownloadButton({ url, children, className = 'btn', title, small }) {
+  const { toast } = useUI();
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      className={`${className} ${busy ? 'is-busy' : ''}`}
+      title={title}
+      disabled={busy}
+      aria-busy={busy}
+      onClick={async (e) => {
+        // Buttons inside a card link must not open the card.
+        e.preventDefault();
+        e.stopPropagation();
+        setBusy(true);
+        try {
+          const { downloadFile } = await import('./api.js');
+          const name = await downloadFile(url);
+          toast(`Downloaded ${name}`);
+        } catch (err) {
+          toast(err.message, 'error');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? <span className="spinner sm" /> : <Icon name="download" size={small ? 14 : 16} />} {busy ? 'Preparing…' : children}
+    </button>
+  );
+}
+
+// A time picker that always shows AM/PM (the browser's own time box follows the PC's 24-hour setting).
+// value / onChange use "HH:MM" (24-hour), '' when not set.
+const HOURS = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
+export function TimeInput({ value, onChange, label }) {
+  const [h24, m] = value ? value.split(':').map(Number) : [null, null];
+  const parts = value ? { h: h24 % 12 || 12, m: String(m).padStart(2, '0'), ap: h24 < 12 ? 'AM' : 'PM' } : { h: '', m: '', ap: '' };
+  const emit = (next) => {
+    const p = { ...parts, ...next };
+    if (p.h === '') return onChange('');
+    const hour = (Number(p.h) % 12) + ((p.ap || 'AM') === 'PM' ? 12 : 0);
+    onChange(`${String(hour).padStart(2, '0')}:${p.m || '00'}`);
+  };
+  // Minutes that aren't on the 5-minute list (e.g. from a PDF) are kept as an option.
+  const minutes = parts.m && !MINUTES.includes(parts.m) ? [...MINUTES, parts.m].sort() : MINUTES;
+  return (
+    <span className="time-input" role="group" aria-label={label}>
+      <select value={parts.h} onChange={(e) => emit({ h: e.target.value })} aria-label={`${label} hour`}>
+        <option value="">--</option>
+        {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+      </select>
+      <span className="time-colon">:</span>
+      <select value={parts.m} onChange={(e) => emit({ m: e.target.value })} aria-label={`${label} minutes`} disabled={parts.h === ''}>
+        {parts.h === '' && <option value="">--</option>}
+        {minutes.map((x) => <option key={x} value={x}>{x}</option>)}
+      </select>
+      <select value={parts.ap} onChange={(e) => emit({ ap: e.target.value })} aria-label={`${label} AM or PM`} disabled={parts.h === ''} className="time-ap">
+        {parts.h === '' && <option value="">--</option>}
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
+    </span>
+  );
+}
+
 // Today's date, e.g. "Tue · Oct 27, 2026", for dashboard headers.
 export function TodayChip() {
   const d = new Date();

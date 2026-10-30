@@ -1,5 +1,6 @@
 // A section meets one or more times a week: [{ day: 'MON', start: '07:00', end: '09:40', room: '1032' }].
 export const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+export const MODES = ['F2F', 'ONLINE', 'BLENDED']; // how a class meets, for the faculty loading report
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export function to12(hhmm) {
@@ -17,12 +18,14 @@ export function cleanSchedule(input) {
     const start = String(r?.start || '');
     const end = String(r?.end || '');
     const room = String(r?.room ?? '').trim().slice(0, 30);
+    const type = ['LEC', 'LAB'].includes(String(r?.type || '').toUpperCase()) ? String(r.type).toUpperCase() : '';
+    const mode = MODES.includes(String(r?.mode || '').toUpperCase()) ? String(r.mode).toUpperCase() : 'F2F';
     if (!day && !start && !end && !room) continue; // blank row
     const n = `Schedule row ${i + 1}`;
     if (!DAYS.includes(day)) return { error: `${n}: choose a day.` };
     if (!HHMM.test(start) || !HHMM.test(end)) return { error: `${n}: enter a start and an end time.` };
     if (end <= start) return { error: `${n}: the end time must be after the start time.` };
-    rows.push({ day, start, end, room });
+    rows.push({ day, start, end, room, type, mode });
   }
   rows.sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || a.start.localeCompare(b.start));
   return { rows };
@@ -38,7 +41,8 @@ export function legacyFields(rows) {
 }
 
 // A faculty member's own weekly blocks besides classes (consultation hours, meetings…):
-// [{ day: 'TUE', start: '08:00', end: '11:00', label: 'Admin/Consultation Hours' }]. Returns { rows } or { error }.
+// [{ day: 'TUE', start: '08:00', end: '11:00', label: 'Admin/Consultation Hours', kind: 'work' }].
+// kind 'work' counts toward working hours; 'break' (lunch, rest) does not. Returns { rows } or { error }.
 export function cleanBlocks(input) {
   if (!Array.isArray(input)) return { error: 'Send a list of blocks.' };
   if (input.length > 40) return { error: 'At most 40 blocks.' };
@@ -47,12 +51,13 @@ export function cleanBlocks(input) {
     const day = String(r?.day || '').toUpperCase();
     const start = String(r?.start || '');
     const end = String(r?.end || '');
-    const label = String(r?.label ?? '').trim().slice(0, 60) || 'Admin/Consultation Hours';
+    const kind = r?.kind === 'break' ? 'break' : 'work';
+    const label = String(r?.label ?? '').trim().slice(0, 60) || (kind === 'break' ? 'Break time' : 'Admin/Consultation Hours');
     const n = `Block ${i + 1}`;
     if (!DAYS.includes(day)) return { error: `${n}: choose a day.` };
     if (!HHMM.test(start) || !HHMM.test(end)) return { error: `${n}: enter a start and an end time.` };
     if (end <= start) return { error: `${n}: the end time must be after the start time.` };
-    rows.push({ day, start, end, label });
+    rows.push({ day, start, end, label, kind });
   }
   rows.sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || a.start.localeCompare(b.start));
   return { rows };

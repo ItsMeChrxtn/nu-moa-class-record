@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { api, DAYS, rowsFromText, to12 } from './api.js';
-import { Icon, Modal } from './ui.jsx';
+import { Icon, Modal, TimeInput } from './ui.jsx';
 
-export const blankRow = () => ({ day: '', start: '', end: '', room: '' });
+export const MODES = ['F2F', 'ONLINE', 'BLENDED'];
+export const blankRow = () => ({ day: '', start: '', end: '', room: '', type: '', mode: 'F2F' });
 
 // Schedule rows: when the section meets. A faculty can add as many as they need.
 export function ScheduleEditor({ rows, onChange, highlighted }) {
@@ -11,39 +12,47 @@ export function ScheduleEditor({ rows, onChange, highlighted }) {
   const add = () => {
     // A new row starts with the previous row's times and room, which is usually what's needed.
     const last = rows[rows.length - 1] || blankRow();
-    onChange([...rows, { day: '', start: last.start, end: last.end, room: last.room }]);
+    onChange([...rows, { day: '', start: last.start, end: last.end, room: last.room, type: '', mode: last.mode || 'F2F' }]);
   };
 
   return (
     <div className={`sched-editor ${highlighted ? 'autofilled' : ''}`}>
-      <div className="sched-editor-head" aria-hidden="true">
-        <span>Day</span>
-        <span>Start</span>
-        <span />
-        <span>End</span>
-        <span>Room</span>
-        <span />
-      </div>
       {rows.map((r, i) => {
         const bad = r.start && r.end && r.end <= r.start;
         return (
           <div key={i} className={`sched-row-edit ${bad ? 'invalid' : ''}`}>
-            <select value={r.day} onChange={(e) => update(i, 'day', e.target.value)} aria-label={`Day for row ${i + 1}`}>
-              <option value="">Day</option>
-              {DAYS.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-            <input type="time" value={r.start} onChange={(e) => update(i, 'start', e.target.value)} aria-label={`Start time for row ${i + 1}`} />
-            <span className="sched-dash">–</span>
-            <input type="time" value={r.end} onChange={(e) => update(i, 'end', e.target.value)} aria-label={`End time for row ${i + 1}`} />
-            <input value={r.room} onChange={(e) => update(i, 'room', e.target.value)} placeholder="Room" aria-label={`Room for row ${i + 1}`} />
-            <button type="button" className="icon-btn danger" title="Remove this schedule" onClick={() => remove(i)}>
-              <Icon name="x" size={15} />
-            </button>
+            <div className="sched-line">
+              <select value={r.day} onChange={(e) => update(i, 'day', e.target.value)} aria-label={`Day for row ${i + 1}`}>
+                <option value="">Day</option>
+                {DAYS.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+              <TimeInput value={r.start} onChange={(v) => update(i, 'start', v)} label={`Start time for row ${i + 1}`} />
+              <span className="sched-dash">–</span>
+              <TimeInput value={r.end} onChange={(v) => update(i, 'end', v)} label={`End time for row ${i + 1}`} />
+              <button type="button" className="icon-btn danger" title="Remove this schedule" onClick={() => remove(i)}>
+                <Icon name="x" size={15} />
+              </button>
+            </div>
+            <div className="sched-line sched-line-2">
+              <input value={r.room} onChange={(e) => update(i, 'room', e.target.value)} placeholder="Room (e.g. 1009 or TBA)" aria-label={`Room for row ${i + 1}`} />
+              <select value={r.type || ''} onChange={(e) => update(i, 'type', e.target.value)} aria-label={`Lecture or laboratory for row ${i + 1}`}>
+                <option value="">LEC / LAB</option>
+                <option value="LEC">LEC</option>
+                <option value="LAB">LAB</option>
+              </select>
+              <select value={r.mode || 'F2F'} onChange={(e) => update(i, 'mode', e.target.value)} aria-label={`Mode for row ${i + 1}`}>
+                {MODES.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            </div>
             {bad && <span className="sched-error">The end time must be after the start time.</span>}
             {!bad && r.day && r.start && r.end && (
-              <span className="sched-preview">{r.day} · {to12(r.start)} – {to12(r.end)}{r.room && ` · Room ${r.room}`}</span>
+              <span className="sched-preview">
+                {r.day} · {to12(r.start)} – {to12(r.end)}{r.room && ` · Room ${r.room}`}{r.type && ` · ${r.type}`} · {r.mode || 'F2F'}
+              </span>
             )}
           </div>
         );

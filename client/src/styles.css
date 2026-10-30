@@ -1102,3 +1102,73 @@ button.mark:active { transform: scale(0.92); }
 .skipped-list ul { display: grid; gap: 4px; margin: 10px 0 0 28px; padding: 0; list-style: none; font-size: 0.84rem; max-height: 160px; overflow: auto; }
 .skipped-list code { font-family: var(--mono); font-size: 0.78rem; margin-right: 6px; }
 .alert.skipped-list { display: block; }
+
+/* ───────────────────────── Time picker (always AM/PM) ───────────────────────── */
+.time-input { display: inline-grid; grid-template-columns: minmax(46px, 1fr) auto minmax(50px, 1fr) minmax(56px, 1fr); align-items: center; gap: 3px; min-width: 0; }
+.time-input select { height: 38px; padding: 0 4px 0 7px; font-family: var(--mono); font-size: 0.84rem; min-width: 0; }
+.time-input select:disabled { color: var(--ink-3); background: var(--bg); }
+.time-input .time-ap { font-weight: 700; }
+.time-colon { font-family: var(--mono); font-weight: 700; color: var(--ink-3); }
+
+/* Schedule rows: day + times on the first line, room / LEC-LAB / mode on the second */
+.sched-row-edit { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.sched-line { display: grid; grid-template-columns: 76px minmax(0, 1fr) 10px minmax(0, 1fr) 28px; gap: 6px; align-items: center; }
+.sched-line-2 { grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.8fr) minmax(0, 0.9fr); }
+.sched-row-edit .sched-line > select, .sched-row-edit .sched-line > input { height: 38px; padding: 0 8px; font-size: 0.85rem; font-family: var(--mono); min-width: 0; }
+.sched-row-edit.invalid .time-input select { border-color: var(--red); }
+.sched-editor-head { display: none; }
+
+/* Buttons that are downloading */
+.spinner.sm { width: 14px; height: 14px; border-width: 2px; }
+.btn.is-busy { cursor: progress; opacity: 0.85; }
+.btn.primary .spinner.sm { border-color: #ffffff66; border-top-color: #fff; }
+
+/* ───────────────────────── Weekly schedule: actions, working hours, breaks ───────────────────────── */
+.timetable-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.work-hours { display: grid; gap: 10px; margin-bottom: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+.work-hours-top { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.work-hours-top strong { font-family: var(--display); font-weight: 900; font-size: 1.6rem; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.work-hours-top strong small { font-family: var(--mono); font-size: 0.8rem; font-weight: 500; color: var(--ink-3); letter-spacing: 0; }
+.work-hours-note { margin-left: auto; padding: 3px 9px; border-radius: 6px; font-family: var(--mono); font-size: 0.74rem; font-weight: 700; background: var(--amber-soft); color: var(--amber-ink); }
+.work-hours.full .work-hours-note { background: var(--green-soft); color: var(--green); }
+.work-hours.over .work-hours-note { background: var(--red-soft); color: var(--red-ink); }
+.work-bar { position: relative; display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--line); }
+.work-bar::after { content: ''; position: absolute; right: 0; top: -2px; bottom: -2px; width: 2px; background: var(--ink); }
+.work-bar span { display: block; height: 100%; transition: width 0.5s cubic-bezier(.2,.8,.2,1); }
+.wb-class { background: var(--blue); }
+.wb-work { background: #64748b; }
+.wb-break { background: repeating-linear-gradient(45deg, #d6a64f 0 3px, #f5e3bd 3px 6px); }
+.work-legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; font-size: 0.82rem; color: var(--ink-2); }
+.work-legend li { display: flex; align-items: center; gap: 7px; }
+.work-legend i { width: 11px; height: 11px; border-radius: 3px; }
+.work-legend strong { font-family: var(--mono); color: var(--ink); }
+.work-legend small { font-family: var(--mono); font-size: 0.66rem; color: var(--ink-3); text-transform: uppercase; }
+.tt-break { --c: #b7791f; --c-soft: #fbf3e1; --c-ink: #8a5a12; border-style: dashed; background-image: repeating-linear-gradient(45deg, #b7791f14 0 4px, transparent 4px 9px); }
+
+/* Loading report window */
+.report-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.signers { display: grid; gap: 8px; }
+.signer { display: grid; grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; align-items: center; }
+.signer strong { font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-2); }
+
+@media (max-width: 680px) {
+  .sched-line { grid-template-columns: 1fr 1fr 28px; }
+  .sched-line > .sched-dash { display: none; }
+  .sched-line > select { grid-column: 1 / -2; }
+  .sched-line-2 { grid-template-columns: 1fr 1fr; }
+  .sched-line-2 > input { grid-column: 1 / -1; }
+  .report-row, .signer { grid-template-columns: 1fr; }
+  .work-hours-note { margin-left: 0; }
+}
+.sched-editor .sched-row-edit { grid-template-columns: minmax(0, 1fr); }
+.sched-row-edit .time-input select { padding: 0 2px 0 6px; }
+@media (max-width: 680px) {
+  .sched-editor .sched-line { grid-template-columns: minmax(0, 1fr) 28px; }
+  .sched-editor .sched-line > select { grid-column: 1; grid-row: 1; }
+  .sched-editor .sched-line > .icon-btn { grid-column: 2; grid-row: 1; }
+  .sched-editor .sched-line > .time-input { grid-column: 1 / -1; }
+  .sched-editor .sched-line > .sched-dash { display: none; }
+  .sched-editor .sched-line.sched-line-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .sched-editor .sched-line-2 > input { grid-column: 1 / -1; grid-row: auto; }
+  .sched-editor .sched-line-2 > select { grid-column: auto; grid-row: auto; }
+}

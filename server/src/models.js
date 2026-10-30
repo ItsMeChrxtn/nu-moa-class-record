@@ -15,7 +15,20 @@ const userSchema = new Schema(
     lastLoginAt: Date,
     credentialsSentAt: Date, // when the current temporary password was emailed
     // Faculty: weekly blocks besides classes, shown on the weekly schedule.
-    scheduleBlocks: [new Schema({ day: String, start: String, end: String, label: String }, { _id: false })],
+    // Faculty: details printed on the Faculty Loading Report (entered once, reused every export).
+    loadingReport: {
+      employeeId: String,
+      classification: String,
+      department: String,
+      checkedBy: String,
+      checkedByTitle: String,
+      endorsedBy: String,
+      endorsedByTitle: String,
+      approvedBy: String,
+      approvedByTitle: String,
+    },
+    // kind: 'work' (counted in working hours) or 'break' (not counted).
+    scheduleBlocks: [new Schema({ day: String, start: String, end: String, label: String, kind: { type: String, default: 'work' } }, { _id: false })],
   },
   { timestamps: true }
 );
@@ -58,7 +71,8 @@ const sectionSchema = new Schema(
     subjectTitle: String,
     // Structured schedule; day/time/room below are kept in sync as one-line summaries.
     schedule: [
-      new Schema({ day: String, start: String, end: String, room: String }, { _id: false }),
+      // type: LEC | LAB | ''; mode: F2F | ONLINE | BLENDED (both for the faculty loading report)
+      new Schema({ day: String, start: String, end: String, room: String, type: String, mode: String }, { _id: false }),
     ],
     day: String,
     time: String,

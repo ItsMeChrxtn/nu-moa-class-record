@@ -24,6 +24,27 @@ export const COMPONENTS = [
 export const PERIODS = { MID: 'Midterms (Wk 1–7)', POST: 'Finals (Wk 8–13)' };
 // Which components belong to each term: MPT is a midterm task, CPT a finals task.
 export const TERM_COMPONENTS = { MID: ['CP', 'EA', 'MPT'], POST: ['CP', 'EA', 'CPT'] };
+// Downloads a file from the API (e.g. an Excel export) and saves it under the server's file name.
+// Resolves to that name; rejects with the server's error message.
+export async function downloadFile(url) {
+  const res = await fetch(url, { credentials: 'same-origin' });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Download failed (${res.status})`);
+  }
+  const cd = res.headers.get('content-disposition') || '';
+  const star = cd.match(/filename\*=UTF-8''([^;]+)/i);
+  const plain = cd.match(/filename="?([^";]+)"?/i);
+  const name = star ? decodeURIComponent(star[1]) : plain ? plain[1] : 'download.xlsx';
+  const href = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href, download: name });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 10000);
+  return name;
+}
+
 // How a student's grade adds up, per component (same rules as the server):
 // midterm = CP/EA of Midterms + MPT; final = CP/EA of both terms + MPT + CPT + bonus.
 export function gradeBreakdown(record, term) {
@@ -131,9 +152,14 @@ export function schedule(section) {
   const days = split(section.day);
   const times = split(section.time);
   const n = Math.max(days.length, times.length);
+  // Shown with AM/PM even when the old text had none ("7:00 - 9:40" -> "7:00 AM – 9:40 AM").
+  const withAmPm = (t) => {
+    const r = parseTimeRange(t);
+    return r ? `${to12(r.start)} – ${to12(r.end)}` : t;
+  };
   return Array.from({ length: n }, (_, i) => ({
     day: days[i] ?? days[days.length - 1] ?? '',
-    time: times[i] ?? times[times.length - 1] ?? '',
+    time: withAmPm(times[i] ?? times[times.length - 1] ?? ''),
     room: i === 0 ? section.room || '' : '',
   }));
 }

@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api, meetingsOn, schedule, todayCode } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { NewSectionModal, deleteSection } from '../Roster.jsx';
-import Timetable, { sectionColors } from '../Timetable.jsx';
-import { EmptyState, ErrorState, Hero, Icon, PageLoader, Stat, TodayChip, firstName, greeting, titleCase, useUI } from '../ui.jsx';
+import Timetable, { LoadingReportModal, sectionColors } from '../Timetable.jsx';
+import { DownloadButton, EmptyState, ErrorState, Hero, Icon, PageLoader, Stat, TodayChip, firstName, greeting, titleCase, useUI } from '../ui.jsx';
 
 const TERM_ORDER = ['first', 'second', 'third', 'summer'];
 const termRank = (t) => {
@@ -29,13 +29,6 @@ function termGroups(sections) {
   return [...map.values()]
     .sort((a, b) => b.academicYear.localeCompare(a.academicYear) || termRank(a.term) - termRank(b.term))
     .map((g) => ({ ...g, sections: g.sections.sort((a, b) => a.code.localeCompare(b.code)) }));
-}
-
-export function downloadSection(id) {
-  const a = Object.assign(document.createElement('a'), { href: `/api/faculty/export?section=${encodeURIComponent(id)}`, download: '' });
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
 }
 
 // One term on a section card: class average (bar) and item count.
@@ -156,18 +149,9 @@ function SectionCard({ s, color, onDelete }) {
           <span className="foot-stat"><Icon name="users" size={15} /><strong>{s.studentCount}</strong> students</span>
         </div>
         <span className="card-tools">
-          <button
-            className="btn card-export"
-            title={`Export the ${s.code} grading sheet (Excel)`}
-            onClick={(e) => {
-              // The card itself is a link, so start the download without following it.
-              e.preventDefault();
-              e.stopPropagation();
-              downloadSection(s.id);
-            }}
-          >
-            <Icon name="download" size={14} /> Excel
-          </button>
+          <DownloadButton small className="btn card-export" url={`/api/faculty/export?section=${encodeURIComponent(s.id)}`} title={`Export the ${s.code} grading sheet (Excel)`}>
+            Excel
+          </DownloadButton>
           <Icon name="chevronRight" className="go" />
         </span>
       </div>
@@ -183,6 +167,7 @@ export default function FacultyHome() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [blocks, setBlocks] = useState([]);
+  const [reporting, setReporting] = useState(false);
   const [view, setView] = useState(() => {
     try {
       return localStorage.getItem('faculty-view') || 'sections';
@@ -272,7 +257,7 @@ export default function FacultyHome() {
         )}
 
         {sections.length > 0 && view === 'schedule' ? (
-          <Timetable sections={latest?.sections || []} blocks={blocks} onBlocksChange={setBlocks} termLabel={latest?.label} />
+          <Timetable sections={latest?.sections || []} blocks={blocks} onBlocksChange={setBlocks} termLabel={latest?.label} onExport={() => setReporting(true)} />
         ) : sections.length === 0 ? (
           <EmptyState title="No sections yet">
             Create a section and import its class list from a PDF.
@@ -289,14 +274,12 @@ export default function FacultyHome() {
                 <h2>
                   {g.label} <span className="count-badge">{g.sections.length}</span>
                 </h2>
-                <a
-                  className="btn"
-                  href={`/api/faculty/export?${new URLSearchParams({ academicYear: g.academicYear, term: g.term })}`}
-                  download
+                <DownloadButton
+                  url={`/api/faculty/export?${new URLSearchParams({ academicYear: g.academicYear, term: g.term })}`}
                   title={`Excel grading sheet with the ${g.sections.length} section${g.sections.length === 1 ? '' : 's'} of ${g.label}`}
                 >
-                  <Icon name="download" size={16} /> Export grading sheet
-                </a>
+                  Export grading sheet
+                </DownloadButton>
               </div>
               <div className="grid">
                 {g.sections.map(card)}
@@ -312,6 +295,7 @@ export default function FacultyHome() {
         )}
       </div>
 
+      {reporting && <LoadingReportModal term={latest} onClose={() => setReporting(false)} />}
       {creating && (
         <NewSectionModal
           sections={sections}

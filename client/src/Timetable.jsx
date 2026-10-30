@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, meetingsOn, to12 } from './api.js';
-import { Icon, Modal, titleCase, useUI } from './ui.jsx';
+import { api, downloadFile, meetingsOn, to12 } from './api.js';
+import { Icon, Modal, TimeInput, titleCase, useUI } from './ui.jsx';
 
 const WEEK = [
   ['MON', 'Monday'],
@@ -49,9 +49,12 @@ function layOut(blocks) {
   return out;
 }
 
-export default function Timetable({ sections, blocks, onBlocksChange, termLabel }) {
+const WEEK_HOURS = 40; // full-time load per week
+const fmtH = (h) => `${Math.round(h * 100) / 100}`;
+
+export default function Timetable({ sections, blocks, onBlocksChange, termLabel, onExport }) {
   const { toast, confirm } = useUI();
-  const [editing, setEditing] = useState(null); // { index } or { index: -1 } for a new block
+  const [editing, setEditing] = useState(null); // { index } or { index: -1, kind } for a new block
   const colors = useMemo(() => sectionColors(sections), [sections]);
 
   const byDay = useMemo(() => {
@@ -71,7 +74,12 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel 
   const first = Math.min(7 * 60, ...all.map((b) => Math.floor(b.start / 60) * 60));
   const last = Math.max(18 * 60, ...all.map((b) => Math.ceil(b.end / 60) * 60));
   const rows = (last - first) / SLOT;
-  const hours = all.filter((b) => b.kind === 'class').reduce((h, b) => h + (b.end - b.start) / 60, 0);
+  const span = (list) => list.reduce((h, b) => h + (b.end - b.start) / 60, 0);
+  // Working hours = classes + admin/consultation blocks; break time is shown but never counted.
+  const classHours = span(all.filter((b) => b.kind === 'class'));
+  const workHours = span(all.filter((b) => b.kind === 'block' && b.b.kind !== 'break'));
+  const breakHours = span(all.filter((b) => b.kind === 'block' && b.b.kind === 'break'));
+  const total = classHours + workHours;
   const today = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date().getDay()];
 
   async function save(next, message) {
@@ -92,12 +100,41 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel 
         <div>
           <span className="stat-label">Weekly schedule{termLabel ? ` · ${termLabel}` : ''}</span>
           <h2>
-            {sections.length} section{sections.length === 1 ? '' : 's'} · {Math.round(hours * 10) / 10} class hours a week
+            {sections.length} section{sections.length === 1 ? '' : 's'} · {fmtH(classHours)} class hours a week
           </h2>
         </div>
-        <button className="btn" onClick={() => setEditing({ index: -1 })}>
-          <Icon name="plus" size={16} /> Consultation hours
-        </button>
+        <div className="timetable-actions">
+          <button className="btn" onClick={() => setEditing({ index: -1, kind: 'work' })}>
+            <Icon name="plus" size={16} /> Admin / consultation
+          </button>
+          <button className="btn" onClick={() => setEditing({ index: -1, kind: 'break' })}>
+            <Icon name="plus" size={16} /> Break time
+          </button>
+          {onExport && (
+            <button className="btn primary" onClick={onExport}>
+              <Icon name="download" size={16} /> Loading report
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className={`work-hours ${total > WEEK_HOURS ? 'over' : total >= WEEK_HOURS ? 'full' : ''}`}>
+        <div className="work-hours-top">
+          <span className="stat-label">Total working hours</span>
+          <strong>{fmtH(total)}<small> / {WEEK_HOURS} hrs a week</small></strong>
+          <span className="work-hours-note">
+            {total < WEEK_HOURS ? `${fmtH(WEEK_HOURS - total)} hrs short of ${WEEK_HOURS}` : total > WEEK_HOURS ? `${fmtH(total - WEEK_HOURS)} hrs over ${WEEK_HOURS}` : `Exactly ${WEEK_HOURS} hrs`}
+          </span>
+        </div>
+        <div className="work-bar" aria-hidden="true">
+          <span className="wb-class" style={{ width: `${Math.min(100, (classHours / Math.max(WEEK_HOURS, total)) * 100)}%` }} />
+          <span className="wb-work" style={{ width: `${Math.min(100, (workHours / Math.max(WEEK_HOURS, total)) * 100)}%` }} />
+        </div>
+        <ul className="work-legend">
+          <li><i className="wb-class" />Classes <strong>{fmtH(classHours)} h</strong></li>
+          <li><i className="wb-work" />Admin / consultation <strong>{fmtH(workHours)} h</strong></li>
+          <li><i className="wb-break" />Break time <strong>{fmtH(breakHours)} h</strong> <small>not counted</small></li>
+        </ul>
       </div>
 
       <div className="timetable-scroll">
@@ -131,7 +168,7 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel 
                     <span className="tt-time">{b.time}{b.room ? ` · ${b.room}` : ''}</span>
                   </Link>
                 ) : (
-                  <button key={i} type="button" className={`tt-block tt-other ${short ? 'short' : ''}`} style={style} onClick={() => setEditing({ index: b.index })} title="Edit this block">
+                  <button key={i} type="button" className={`tt-block ${b.b.kind === 'break' ? 'tt-break' : 'tt-other'} ${short ? 'short' : ''}`} style={style} onClick={() => setEditing({ index: b.index })} title="Edit this block">
                     <strong>{b.b.label}</strong>
                     <span className="tt-time">{b.time}</span>
                   </button>
@@ -145,10 +182,11 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel 
       {editing && (
         <BlockModal
           block={editing.index >= 0 ? blocks[editing.index] : null}
+          kind={editing.kind}
           onClose={() => setEditing(null)}
           onSave={async (b) => {
             const next = editing.index >= 0 ? blocks.map((x, i) => (i === editing.index ? b : x)) : [...blocks, b];
-            if (await save(next, editing.index >= 0 ? 'Block updated' : 'Added to your schedule')) setEditing(null);
+            if (await save(next, editing.index >= 0 ? 'Block updated' : b.kind === 'break' ? 'Break time added' : 'Added to your schedule')) setEditing(null);
           }}
           onDelete={
             editing.index >= 0
@@ -164,15 +202,23 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel 
   );
 }
 
-function BlockModal({ block, onSave, onDelete, onClose }) {
-  const [form, setForm] = useState(block || { label: 'Admin/Consultation Hours', day: 'MON', start: '08:00', end: '10:00' });
+const DEFAULT_LABEL = { work: 'Admin/Consultation Hours', break: 'Break time' };
+
+function BlockModal({ block, kind = 'work', onSave, onDelete, onClose }) {
+  const [form, setForm] = useState(() =>
+    block
+      ? { kind: 'work', ...block }
+      : { kind, label: DEFAULT_LABEL[kind], day: 'MON', start: kind === 'break' ? '12:00' : '08:00', end: kind === 'break' ? '13:00' : '10:00' }
+  );
+  // Switching the type also switches a default label, but keeps one the faculty typed.
+  const setKind = (k) => setForm({ ...form, kind: k, label: !form.label || Object.values(DEFAULT_LABEL).includes(form.label) ? DEFAULT_LABEL[k] : form.label });
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const bad = !form.start || !form.end || form.end <= form.start;
   return (
     <Modal
-      title={block ? 'Edit block' : 'Add consultation hours'}
-      subtitle="Consultation hours, meetings, or anything else that fills your week. Only you see these."
+      title={block ? 'Edit time block' : form.kind === 'break' ? 'Add break time' : 'Add admin / consultation hours'}
+      subtitle="Admin and consultation hours count toward your working hours; break time is shown but not counted. Only you see these."
       icon="calendar"
       onClose={onClose}
       width={480}
@@ -199,30 +245,127 @@ function BlockModal({ block, onSave, onDelete, onClose }) {
       }
     >
       <div style={{ display: 'grid', gap: 14 }}>
+        <div className="field">
+          <span className="field-label">Type</span>
+          <div className="segmented">
+            <button type="button" className={form.kind !== 'break' ? 'active' : ''} onClick={() => setKind('work')}>Working hours</button>
+            <button type="button" className={form.kind === 'break' ? 'active' : ''} onClick={() => setKind('break')}>Break time (not counted)</button>
+          </div>
+        </div>
         <label className="field">
           <span>Label</span>
           <input value={form.label} maxLength={60} onChange={set('label')} />
         </label>
-        <div className="row-3">
-          <label className="field">
-            <span>Day</span>
-            <select value={form.day} onChange={set('day')}>
-              {WEEK.map(([d, name]) => (
-                <option key={d} value={d}>{name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Start</span>
-            <input type="time" value={form.start} onChange={set('start')} />
-          </label>
-          <label className="field">
-            <span>End</span>
-            <input type="time" value={form.end} onChange={set('end')} />
-          </label>
+        <label className="field">
+          <span>Day</span>
+          <select value={form.day} onChange={set('day')}>
+            {WEEK.map(([d, name]) => (
+              <option key={d} value={d}>{name}</option>
+            ))}
+          </select>
+        </label>
+        <div className="row-2">
+          <div className="field">
+            <span className="field-label">Start</span>
+            <TimeInput value={form.start} onChange={(v) => setForm({ ...form, start: v })} label="Start time" />
+          </div>
+          <div className="field">
+            <span className="field-label">End</span>
+            <TimeInput value={form.end} onChange={(v) => setForm({ ...form, end: v })} label="End time" />
+          </div>
         </div>
         {bad && <div className="alert error"><Icon name="alert" />The end time must be after the start time.</div>}
       </div>
+    </Modal>
+  );
+}
+
+const REPORT_FIELDS = [
+  ['employeeId', 'Employee ID', 'e.g. 00-00000'],
+  ['classification', 'Classification', 'e.g. Full Time Probationary'],
+  ['department', 'School / department', 'e.g. School of Information Technology'],
+];
+const SIGNERS = [
+  ['checkedBy', 'Checked by', 'Program Chair, School of Information Technology'],
+  ['endorsedBy', 'Endorsed by', 'Dean, School of Information Technology'],
+  ['approvedBy', 'Approved by', 'Academic Director'],
+];
+
+// Faculty Loading Report: the details printed on it are saved once, then the Excel file is made.
+export function LoadingReportModal({ term, onClose }) {
+  const { toast } = useUI();
+  const [details, setDetails] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    api('/faculty/loading-report/details')
+      .then((d) => setDetails(d.details || {}))
+      .catch((e) => setError(e.message));
+  }, []);
+  const set = (k) => (e) => setDetails({ ...details, [k]: e.target.value });
+
+  async function download() {
+    setBusy(true);
+    setError('');
+    try {
+      await api('/faculty/loading-report/details', { method: 'PUT', body: { details } });
+      const name = await downloadFile(`/api/faculty/loading-report?${new URLSearchParams({ academicYear: term?.academicYear || '', term: term?.term || '' })}`);
+      toast(`Downloaded ${name}`);
+      onClose();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title="Faculty loading report"
+      subtitle={`Your classes${term?.label ? ` for ${term.label}` : ''}, admin/consultation hours and totals, in the school's loading report format (Excel). These details are saved for next time.`}
+      icon="download"
+      onClose={onClose}
+      width={620}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn primary" disabled={busy || !details} onClick={download}>
+            {busy ? <span className="spinner sm" /> : <Icon name="download" size={16} />} {busy ? 'Preparing…' : 'Download Excel'}
+          </button>
+        </>
+      }
+    >
+      {!details ? (
+        error ? <div className="alert error"><Icon name="alert" />{error}</div> : <div className="page-loader"><span className="spinner" /></div>
+      ) : (
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div className="row-3 report-row">
+            {REPORT_FIELDS.map(([k, label, ph]) => (
+              <label key={k} className="field">
+                <span>{label}</span>
+                <input value={details[k] || ''} maxLength={80} placeholder={ph} onChange={set(k)} />
+              </label>
+            ))}
+          </div>
+          <div className="field">
+            <span className="field-label">Signatories</span>
+            <div className="signers">
+              {SIGNERS.map(([k, label, titlePh]) => (
+                <div key={k} className="signer">
+                  <strong>{label}</strong>
+                  <input value={details[k] || ''} maxLength={80} placeholder="Name" onChange={set(k)} aria-label={`${label} name`} />
+                  <input value={details[`${k}Title`] || ''} maxLength={80} placeholder={titlePh} onChange={set(`${k}Title`)} aria-label={`${label} position`} />
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="muted small">
+            Each class meeting becomes one row: subject, section, day, time, LEC/LAB, room and mode come from the section&apos;s schedule (set LEC/LAB and
+            mode in <strong>Section details</strong>). Admin/consultation blocks fill in the consultation and administration hours; break time is left out.
+          </p>
+          {error && <div className="alert error"><Icon name="alert" />{error}</div>}
+        </div>
+      )}
     </Modal>
   );
 }

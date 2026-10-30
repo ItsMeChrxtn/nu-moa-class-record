@@ -8,6 +8,7 @@ import { saveCredentials } from './credentials.js';
 import { cleanBlocks, cleanSchedule, legacyFields } from './schedule.js';
 import { mailConfigured, sendStudentCredentials } from './mailer.js';
 import { buildClassRecord, facultyTerms, gradingFileName } from './classRecordExport.js';
+import { PROFILE_FIELDS, buildLoadingReport, loadingFileName } from './facultyLoading.js';
 import admin from './admin.js';
 import {
   clearSession,
@@ -515,6 +516,37 @@ faculty.delete(
   })
 );
 
+// Details for the Faculty Loading Report (employee ID, classification, signatories).
+faculty.get('/loading-report/details', wrap(async (req, res) => res.json({ details: req.user.loadingReport || {} })));
+faculty.put(
+  '/loading-report/details',
+  wrap(async (req, res) => {
+    const body = req.body?.details || {};
+    const details = {};
+    for (const k of PROFILE_FIELDS) details[k] = str(body[k], 80);
+    req.user.loadingReport = details;
+    await req.user.save();
+    res.json({ details });
+  })
+);
+
+// Faculty Loading Report for one term (?academicYear=&term=; default: the latest term), from the school's template.
+faculty.get(
+  '/loading-report',
+  wrap(async (req, res) => {
+    const t = req.query.academicYear !== undefined || req.query.term !== undefined ? { academicYear: req.query.academicYear, term: req.query.term } : (await facultyTerms(req.user))[0] || {};
+    const filter = { academicYear: String(t.academicYear ?? ''), term: String(t.term ?? '') };
+    const query = { faculty: req.user._id, academicYear: filter.academicYear || { $in: ['', null] }, term: filter.term || { $in: ['', null] } };
+    const sections = await Section.find(query);
+    if (!sections.length) return res.status(404).json({ error: 'No sections for that term.' });
+    const { buffer } = await buildLoadingReport(req.user, sections, req.user.scheduleBlocks || [], req.user.loadingReport || {}, filter);
+    const name = loadingFileName(req.user, filter.term, filter.academicYear);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${name.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`);
+    res.send(buffer);
+  })
+);
+
 // Grading sheet in the NU class record format: one sheet per section, filled into the CLREC template.
 faculty.get(
   '/export',
@@ -646,7 +678,7 @@ function sectionSummary(s) {
     code: s.code,
     subjectCode: s.subjectCode,
     subjectTitle: s.subjectTitle,
-    schedule: s.schedule?.length ? s.schedule.map(({ day, start, end, room }) => ({ day, start, end, room })) : [],
+    schedule: s.schedule?.length ? s.schedule.map(({ day, start, end, room, type, mode }) => ({ day, start, end, room, type: type || '', mode: mode || 'F2F' })) : [],
     day: s.day,
     time: s.time,
     room: s.room,

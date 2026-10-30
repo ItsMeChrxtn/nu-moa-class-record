@@ -46,7 +46,7 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const groupKey = (i) => (i.component === 'CP' || i.component === 'EA' ? `${i.component}-${i.period}` : i.component);
 
 // Minimal editor for a worksheet's <sheetData>: set / clear cells, keeping each cell's style.
-class SheetXml {
+export class SheetXml {
   constructor(xml) {
     const m = xml.match(/<sheetData\s*\/>|<sheetData>([\s\S]*?)<\/sheetData>/);
     if (!m) throw new Error('sheetData not found');
@@ -81,6 +81,10 @@ class SheetXml {
     else xml = `<c r="${ref}"${sa} t="inlineStr"><is><t xml:space="preserve">${esc(value)}</t></is></c>`;
     row.cells.set(col, xml);
     row.attrs = row.attrs.replace(/\sspans="[^"]*"/, ''); // spans is only a hint; drop it once cells change
+  }
+  hideRow(r) {
+    const row = this.row(r);
+    if (!/\shidden="1"/.test(row.attrs)) row.attrs += ' hidden="1"';
   }
   // Copy a whole row (cells, styles, formulas) to a new row number, e.g. for more than 50 students.
   cloneRow(from, to) {
