@@ -1172,3 +1172,14 @@ button.mark:active { transform: scale(0.92); }
   .sched-editor .sched-line-2 > input { grid-column: 1 / -1; grid-row: auto; }
   .sched-editor .sched-line-2 > select { grid-column: auto; grid-row: auto; }
 }
+
+/* Block form: pick one or more days */
+.day-chips { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.day-chips button { height: 40px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--surface); font-family: var(--mono); font-size: 0.8rem; font-weight: 700; color: var(--ink-2); cursor: pointer; transition: background 0.12s, border-color 0.12s, box-shadow 0.12s; }
+.day-chips button:hover { border-color: var(--ink); color: var(--ink); }
+.day-chips button.on { background: var(--ink); border-color: var(--ink); color: #fff; box-shadow: 2px 2px 0 var(--blue); }
+.day-presets { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+.day-presets .link-btn { font-size: 0.72rem; }
+@media (max-width: 420px) { .day-chips { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.day-presets .link-btn { color: var(--blue); }
+.day-presets .link-btn:hover { color: var(--ink); }

@@ -184,9 +184,19 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel,
           block={editing.index >= 0 ? blocks[editing.index] : null}
           kind={editing.kind}
           onClose={() => setEditing(null)}
-          onSave={async (b) => {
-            const next = editing.index >= 0 ? blocks.map((x, i) => (i === editing.index ? b : x)) : [...blocks, b];
-            if (await save(next, editing.index >= 0 ? 'Block updated' : b.kind === 'break' ? 'Break time added' : 'Added to your schedule')) setEditing(null);
+          onSave={async (list) => {
+            // Editing replaces this block with the first chosen day; any other days are added as copies.
+            const kept = editing.index >= 0 ? blocks.filter((_, i) => i !== editing.index) : blocks;
+            const same = (a, b) => a.day === b.day && a.start === b.start && a.end === b.end && (a.kind || 'work') === (b.kind || 'work');
+            const added = list.filter((b) => !kept.some((x) => same(x, b))); // skip exact duplicates
+            const next = editing.index >= 0 ? [...blocks.slice(0, editing.index), ...added, ...blocks.slice(editing.index + 1)] : [...blocks, ...added];
+            const what = list[0].kind === 'break' ? 'Break time' : 'Admin / consultation hours';
+            const msg = editing.index >= 0 ? (added.length > 1 ? `Block updated and copied to ${added.length - 1} more day${added.length > 2 ? 's' : ''}` : 'Block updated') : `${what} added${added.length > 1 ? ` on ${added.length} days` : ''}`;
+            if (!added.length) {
+              toast('Those days already have this exact block.', 'error');
+              return;
+            }
+            if (await save(next, msg)) setEditing(null);
           }}
           onDelete={
             editing.index >= 0
@@ -203,6 +213,13 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel,
 }
 
 const DEFAULT_LABEL = { work: 'Admin/Consultation Hours', break: 'Break time' };
+const DAY_PRESETS = [
+  ['Mon–Fri', ['MON', 'TUE', 'WED', 'THU', 'FRI']],
+  ['Mon–Sat', ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']],
+  ['MWF', ['MON', 'WED', 'FRI']],
+  ['TTh', ['TUE', 'THU']],
+  ['Clear', []],
+];
 
 function BlockModal({ block, kind = 'work', onSave, onDelete, onClose }) {
   const [form, setForm] = useState(() =>
@@ -212,9 +229,12 @@ function BlockModal({ block, kind = 'work', onSave, onDelete, onClose }) {
   );
   // Switching the type also switches a default label, but keeps one the faculty typed.
   const setKind = (k) => setForm({ ...form, kind: k, label: !form.label || Object.values(DEFAULT_LABEL).includes(form.label) ? DEFAULT_LABEL[k] : form.label });
+  // One block per chosen day, all with the same time and label.
+  const [days, setDays] = useState(() => [block?.day || 'MON']);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const bad = !form.start || !form.end || form.end <= form.start;
+  const ordered = WEEK.map(([d]) => d).filter((d) => days.includes(d));
   return (
     <Modal
       title={block ? 'Edit time block' : form.kind === 'break' ? 'Add break time' : 'Add admin / consultation hours'}
@@ -232,14 +252,15 @@ function BlockModal({ block, kind = 'work', onSave, onDelete, onClose }) {
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button
             className="btn primary"
-            disabled={busy || bad}
+            disabled={busy || bad || !ordered.length}
             onClick={async () => {
               setBusy(true);
-              await onSave(form);
+              const { day, ...rest } = form;
+              await onSave(ordered.map((d) => ({ ...rest, day: d })));
               setBusy(false);
             }}
           >
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? 'Saving…' : ordered.length > 1 ? `Save for ${ordered.length} days` : 'Save'}
           </button>
         </>
       }
@@ -256,14 +277,32 @@ function BlockModal({ block, kind = 'work', onSave, onDelete, onClose }) {
           <span>Label</span>
           <input value={form.label} maxLength={60} onChange={set('label')} />
         </label>
-        <label className="field">
-          <span>Day</span>
-          <select value={form.day} onChange={set('day')}>
+        <div className="field">
+          <span className="field-label">
+            Days <small className="muted">· same time on every day you pick</small>
+          </span>
+          <div className="day-chips" role="group" aria-label="Days">
             {WEEK.map(([d, name]) => (
-              <option key={d} value={d}>{name}</option>
+              <button
+                key={d}
+                type="button"
+                className={days.includes(d) ? 'on' : ''}
+                aria-pressed={days.includes(d)}
+                title={name}
+                onClick={() => setDays(days.includes(d) ? days.filter((x) => x !== d) : [...days, d])}
+              >
+                {d}
+              </button>
             ))}
-          </select>
-        </label>
+          </div>
+          <div className="day-presets">
+            {DAY_PRESETS.map(([label, list]) => (
+              <button key={label} type="button" className="link-btn" onClick={() => setDays(list)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="row-2">
           <div className="field">
             <span className="field-label">Start</span>
