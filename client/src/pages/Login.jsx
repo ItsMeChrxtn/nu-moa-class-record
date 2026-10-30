@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
-import { BrandMark, Icon } from '../ui.jsx';
+import { BrandMark, Icon, firstName, useUI } from '../ui.jsx';
 
 export default function Login() {
   const { user, login } = useAuth();
+  const { toast } = useUI();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -19,10 +20,12 @@ export default function Login() {
     setBusy(true);
     setError('');
     try {
-      await login(username, password);
+      const u = await login(username, password);
+      toast(u.mustChangePassword ? 'Please set a new password to continue.' : 'You are signed in.', 'success', `Welcome back, ${firstName(u.name)}! 👋`);
       navigate('/');
     } catch (err) {
       setError(err.message);
+      toast(err.message, 'error', 'Sign-in failed');
     } finally {
       setBusy(false);
     }

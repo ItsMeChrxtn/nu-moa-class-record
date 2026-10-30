@@ -16,12 +16,12 @@ export function AuthProvider({ children }) {
     user,
     setUser,
     async login(username, password) {
-      const d = await api('/auth/login', { method: 'POST', body: { username, password } });
+      const d = await api('/auth/login', { method: 'POST', body: { username, password }, label: 'Signing in…' });
       setUser(d.user);
       return d.user;
     },
     async logout() {
-      await api('/auth/logout', { method: 'POST' });
+      await api('/auth/logout', { method: 'POST', label: 'Logging out…' });
       setUser(null);
     },
   };

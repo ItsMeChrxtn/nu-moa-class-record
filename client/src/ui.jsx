@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { activity } from './api.js';
-import { ProgressOverlay, SweetAlert } from './Feedback.jsx';
+import { ProgressOverlay, SwalCard, SweetAlert } from './Feedback.jsx';
 
 const paths = {
   logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
@@ -508,15 +508,7 @@ function ConfirmDialog({ dialog, close }) {
     return () => document.removeEventListener('keydown', esc);
   }, [close]);
   return (
-    <div className="swal-backdrop" onClick={() => close(false)}>
-      <div className={`swal ${dialog.danger ? 'swal-warning' : 'swal-question'}`} role="alertdialog" aria-modal="true" aria-label={dialog.title} onClick={(e) => e.stopPropagation()}>
-        <div className={`swal-icon ${dialog.danger ? 'swal-icon-warning' : 'swal-icon-question'}`} aria-hidden="true">
-          <svg viewBox="0 0 52 52">
-            <circle className="swal-ring" cx="26" cy="26" r="24" />
-            {dialog.danger ? <path className="swal-check" d="M26 14 L26 30 M26 37 L26 38" /> : <path className="swal-check" d="M20 20 Q20 14 26 14 Q32 14 32 20 Q32 25 26 27 L26 31 M26 37 L26 38" />}
-          </svg>
-        </div>
-        <h2>{dialog.title}</h2>
+    <SwalCard type={dialog.danger ? 'warning' : 'question'} title={dialog.title} onClose={() => close(false)}>
         {dialog.message && <p>{dialog.message}</p>}
         {dialog.requireText && (
           <label className="field swal-field">
@@ -535,8 +527,7 @@ function ConfirmDialog({ dialog, close }) {
             {dialog.confirmLabel || 'Continue'}
           </button>
         </div>
-      </div>
-    </div>
+    </SwalCard>
   );
 }
 

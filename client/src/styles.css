@@ -1298,3 +1298,96 @@ button.mark:active { transform: scale(0.92); }
 .bell-text time { font-family: var(--mono); font-size: 0.66rem; color: var(--ink-3); }
 .bell-new { padding: 2px 6px; border-radius: 5px; background: var(--blue); color: #fff; font-family: var(--mono); font-size: 0.62rem; font-weight: 700; text-transform: uppercase; }
 @keyframes bell-ring { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(14deg); } 30% { transform: rotate(-12deg); } 45% { transform: rotate(8deg); } 60% { transform: rotate(-5deg); } }
+
+/* ───────────────────────── Loading: Blaze chases Sparky ───────────────────────── */
+.pg-card { width: min(560px, 100%); padding: 24px 26px 18px; }
+.pg-stage { padding-top: 96px; }
+/* Sparky leads at the end of the bar; Blaze is 170px behind. */
+.pg-chase { position: absolute; left: 0; right: 0; top: 0; height: 92px; --c: clamp(170px, calc(var(--p) - 66px), calc(100% - 66px)); }
+.runner { position: absolute; bottom: 2px; left: var(--c); width: 66px; height: 66px; transition: left 0.25s ease-out; }
+.chaser { position: absolute; bottom: 0; left: calc(var(--c) - 170px); width: 116px; height: 88px; transition: left 0.25s ease-out; }
+.dragon-svg { position: relative; z-index: 2; display: block; width: 116px; height: 88px; overflow: visible; }
+.speedster-svg { display: block; width: 66px; height: 66px; overflow: visible; }
+
+.run .chaser .dragon-svg { animation: stomp 0.42s ease-in-out infinite; }
+.run .dragon-wing { transform-origin: 62px 26px; animation: flap 0.3s ease-in-out infinite alternate; }
+.run .dragon-tail { transform-origin: 30px 56px; animation: wag 0.42s ease-in-out infinite alternate; }
+.run .runner .speedster-svg { animation: dash 0.26s ease-in-out infinite; }
+.run .leg-a { animation: step 0.26s ease-in-out infinite; }
+.run .leg-b { animation: step 0.26s ease-in-out infinite reverse; }
+.run .speedster-sweat { animation: sweat 0.6s ease-in infinite; }
+@keyframes stomp { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-5px) rotate(2deg); } }
+@keyframes flap { from { transform: rotate(-10deg); } to { transform: rotate(14deg); } }
+@keyframes wag { from { transform: rotate(-8deg); } to { transform: rotate(8deg); } }
+@keyframes dash { 0%, 100% { transform: translateY(0) rotate(4deg); } 50% { transform: translateY(-9px) rotate(-3deg); } }
+@keyframes sweat { 0% { opacity: 1; transform: translate(0, 0); } 100% { opacity: 0; transform: translate(6px, -8px); } }
+
+/* Fire breath: puffs that leave Blaze's mouth and fade before reaching Sparky. */
+.fire { position: absolute; z-index: 1; left: 98px; top: 22px; width: 64px; height: 30px; pointer-events: none; }
+.fire i { position: absolute; left: 0; top: 50%; width: 22px; height: 22px; margin-top: -11px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; background: radial-gradient(circle at 40% 45%, #fff7ae 0 18%, #fde047 30%, #fb923c 60%, #ef4444 85%); filter: drop-shadow(0 0 6px #fb923caa); opacity: 0; animation: breath 0.7s ease-out infinite; }
+.fire i:nth-child(2) { animation-delay: 0.14s; }
+.fire i:nth-child(3) { animation-delay: 0.28s; }
+.fire i:nth-child(4) { animation-delay: 0.42s; }
+.fire i:nth-child(5) { animation-delay: 0.56s; }
+@keyframes breath { 0% { opacity: 0.95; transform: translate(0, 0) scale(0.5); } 60% { opacity: 0.9; } 100% { opacity: 0; transform: translate(58px, var(--dy, -4px)) scale(1.5); } }
+.fire i:nth-child(odd) { --dy: 5px; }
+/* At the finish the fire turns into fireworks shooting up. */
+.fire.fireworks { left: 82px; top: -6px; }
+.fire.fireworks i { width: 12px; height: 12px; margin: 0; background: radial-gradient(circle, #fff 0 25%, #facc15 45%, #f97316 80%); animation: firework 0.9s ease-out infinite; }
+.fire.fireworks i:nth-child(2) { --fx: -26px; }
+.fire.fireworks i:nth-child(3) { --fx: 26px; }
+.fire.fireworks i:nth-child(4) { --fx: -12px; }
+.fire.fireworks i:nth-child(5) { --fx: 14px; }
+@keyframes firework { 0% { opacity: 1; transform: translate(0, 0) scale(0.6); } 100% { opacity: 0; transform: translate(var(--fx, 0px), -48px) scale(1.6); } }
+
+/* Dust behind Sparky's feet */
+.dust { position: absolute; left: -10px; bottom: 2px; width: 20px; height: 14px; }
+.dust i { position: absolute; left: 0; bottom: 0; width: 9px; height: 9px; border-radius: 50%; background: #cbd5e1; opacity: 0; animation: dust 0.5s ease-out infinite; }
+.dust i:nth-child(2) { animation-delay: 0.17s; }
+.dust i:nth-child(3) { animation-delay: 0.34s; }
+@keyframes dust { 0% { opacity: 0.8; transform: translate(0, 0) scale(0.6); } 100% { opacity: 0; transform: translate(-16px, -6px) scale(1.4); } }
+
+/* Celebration: both jump */
+.cheer .runner .speedster-svg { animation: cheer 0.55s cubic-bezier(.3,1.6,.5,1) infinite; }
+.cheer .chaser .dragon-svg { animation: cheer 0.7s 0.15s cubic-bezier(.3,1.6,.5,1) infinite; }
+.cheer .dragon-wing { transform-origin: 62px 26px; animation: flap 0.18s ease-in-out infinite alternate; }
+
+/* ───────────────────────── Popups (sweet alerts), polished ───────────────────────── */
+.swal { width: min(440px, 100%); padding: 0 28px 24px; gap: 8px; border-radius: 22px; }
+.swal-band { position: relative; align-self: stretch; height: 74px; margin: 0 -28px -44px; background: linear-gradient(135deg, var(--t1), var(--t2)); overflow: hidden; }
+.swal-dots { position: absolute; inset: 0; background-image: radial-gradient(#ffffff40 1.5px, transparent 1.6px); background-size: 14px 14px; }
+.swal-band::after { content: ''; position: absolute; right: -30px; top: -40px; width: 140px; height: 140px; border-radius: 50%; border: 22px solid #ffffff22; }
+.swal-mascot { position: absolute; left: 18px; bottom: -6px; width: 54px; height: 54px; animation: cheer 0.8s cubic-bezier(.3,1.6,.5,1) infinite; }
+.swal-mascot .speedster-svg { width: 54px; height: 54px; }
+.swal-success { --t1: #16a34a; --t2: #4ade80; --tone: var(--green); }
+.swal-error { --t1: #b91c1c; --t2: #f87171; --tone: var(--red); }
+.swal-info { --t1: #1d4ed8; --t2: #60a5fa; --tone: var(--blue); }
+.swal-warning { --t1: #b45309; --t2: #fbbf24; --tone: var(--amber); }
+.swal-question { --t1: #1d4ed8; --t2: #818cf8; --tone: var(--blue); }
+.swal-icon { position: relative; z-index: 1; width: 88px; height: 88px; padding: 6px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 4px var(--surface), 0 8px 24px -8px var(--tone); animation: icon-pop 0.45s cubic-bezier(.2,1.6,.4,1) both; }
+.swal-icon svg { stroke: var(--tone) !important; }
+.swal-icon::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--tone); opacity: 0; animation: ring-pulse 1.6s 0.4s ease-out infinite; }
+.swal-mark { stroke-width: 4; stroke-dasharray: 60; stroke-dashoffset: 60; animation: swal-draw 0.4s 0.35s ease-out forwards; }
+.swal h2 { margin-top: 6px; font-size: 1.6rem; }
+.swal p { font-size: 0.97rem; }
+.swal-ok { min-width: 140px; height: 46px; margin-top: 10px; border-color: var(--ink); color: #fff; background: var(--tone); }
+.swal-ok:not(:disabled):hover { background: var(--t1); }
+.swal-timer { background: var(--tone); }
+.swal .pg-confetti { inset: 0; }
+.swal .pg-confetti i { animation-duration: 1.6s; }
+@keyframes icon-pop { from { transform: scale(0.4); opacity: 0; } }
+@keyframes ring-pulse { 0% { opacity: 0.7; transform: scale(0.9); } 100% { opacity: 0; transform: scale(1.35); } }
+
+@media (max-width: 520px) {
+  .pg-chase { --c: clamp(150px, calc(var(--p) - 56px), calc(100% - 56px)); }
+  .runner { width: 56px; height: 56px; }
+  .speedster-svg { width: 56px; height: 56px; }
+  .chaser { left: calc(var(--c) - 150px); width: 96px; height: 74px; }
+  .dragon-svg { width: 96px; height: 74px; }
+  .fire { left: 82px; top: 18px; width: 50px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dragon-svg, .speedster-svg, .dragon-wing, .dragon-tail, .leg, .fire i, .dust i, .swal-mascot, .swal-icon, .swal-icon::before { animation: none !important; }
+  .swal-mark { stroke-dashoffset: 0; }
+}
+.swal-band { justify-self: stretch; width: calc(100% + 56px); }

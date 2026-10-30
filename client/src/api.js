@@ -2,7 +2,7 @@
 // bar: 'start' { id, label }, 'progress' { id, value 0–1 }, 'end' { id, ok }. Quick, frequent saves
 // (a score cell, an attendance mark, the bonus) and signing in stay silent.
 export const activity = new EventTarget();
-const QUIET = [/\/scores$/, /\/attendance\/marks$/, /^\/auth\//, /^\/me\/notifications/];
+const QUIET = [/\/scores$/, /\/attendance\/marks$/, /^\/auth\/me$/, /^\/me\/notifications/];
 const LABEL = { POST: 'Saving', PUT: 'Saving', PATCH: 'Updating', DELETE: 'Deleting' };
 let nextId = 0;
 const emit = (type, detail) => activity.dispatchEvent(new CustomEvent(type, { detail }));

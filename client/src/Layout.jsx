@@ -1,10 +1,11 @@
 import { Link, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from './auth.jsx';
 import NotificationBell from './Notifications.jsx';
-import { Avatar, BrandMark, Icon, titleCase } from './ui.jsx';
+import { Avatar, BrandMark, Icon, firstName, titleCase, useUI } from './ui.jsx';
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { confirm, toast } = useUI();
   const navigate = useNavigate();
   return (
     <div className="app">
@@ -31,8 +32,12 @@ export default function Layout() {
                 className="btn glass"
                 title="Log out"
                 onClick={async () => {
+                  const ok = await confirm({ title: 'Log out?', message: 'You will need your password to sign in again.', confirmLabel: 'Log out' });
+                  if (!ok) return;
+                  const name = firstName(user.name);
                   await logout();
                   navigate('/login');
+                  toast(`See you next time, ${name}!`, 'success', 'Logged out 👋');
                 }}
               >
                 <Icon name="logout" size={16} />
