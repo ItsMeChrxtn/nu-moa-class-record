@@ -161,32 +161,48 @@ export function DownloadButton({ url, children, className = 'btn', title, small 
 // value / onChange use "HH:MM" (24-hour), '' when not set.
 const HOURS = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, '0'));
-export function TimeInput({ value, onChange, label }) {
+// min / max ("HH:MM", optional) limit what can be picked: options outside are greyed out, and a
+// choice that would land outside (e.g. switching AM to PM) snaps to the nearest allowed time.
+export function TimeInput({ value, onChange, label, min, max }) {
   const [h24, m] = value ? value.split(':').map(Number) : [null, null];
   const parts = value ? { h: h24 % 12 || 12, m: String(m).padStart(2, '0'), ap: h24 < 12 ? 'AM' : 'PM' } : { h: '', m: '', ap: '' };
-  const emit = (next) => {
-    const p = { ...parts, ...next };
-    if (p.h === '') return onChange('');
-    const hour = (Number(p.h) % 12) + ((p.ap || 'AM') === 'PM' ? 12 : 0);
-    onChange(`${String(hour).padStart(2, '0')}:${p.m || '00'}`);
-  };
+  const hhmm = (h, mm, ap) => `${String((Number(h) % 12) + (ap === 'PM' ? 12 : 0)).padStart(2, '0')}:${mm}`;
+  const allowed = (t) => (!min || t >= min) && (!max || t <= max);
   // Minutes that aren't on the 5-minute list (e.g. from a PDF) are kept as an option.
   const minutes = parts.m && !MINUTES.includes(parts.m) ? [...MINUTES, parts.m].sort() : MINUTES;
+  const apOk = (ap) => HOURS.some((h) => minutes.some((mm) => allowed(hhmm(h, mm, ap))));
+  const ap = parts.ap || (apOk('AM') ? 'AM' : 'PM');
+  const hourOk = (h) => minutes.some((mm) => allowed(hhmm(h, mm, ap)));
+  const emit = (next) => {
+    const p = { ...parts, ap, ...next };
+    if (p.h === '') return onChange('');
+    let t = hhmm(p.h, p.m || '00', p.ap);
+    if (!allowed(t)) {
+      // Try the other half of the day first (picking "7" when only PM is allowed means 7 PM), then snap.
+      const other = hhmm(p.h, p.m || '00', p.ap === 'AM' ? 'PM' : 'AM');
+      t = next.ap === undefined && allowed(other) ? other : min && t < min ? min : max || t;
+    }
+    onChange(t);
+  };
   return (
     <span className="time-input" role="group" aria-label={label}>
       <select value={parts.h} onChange={(e) => emit({ h: e.target.value })} aria-label={`${label} hour`}>
         <option value="">--</option>
-        {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+        {HOURS.map((h) => (
+          <option key={h} value={h} disabled={!hourOk(h)}>{h}</option>
+        ))}
       </select>
       <span className="time-colon">:</span>
       <select value={parts.m} onChange={(e) => emit({ m: e.target.value })} aria-label={`${label} minutes`} disabled={parts.h === ''}>
         {parts.h === '' && <option value="">--</option>}
-        {minutes.map((x) => <option key={x} value={x}>{x}</option>)}
+        {minutes.map((x) => (
+          <option key={x} value={x} disabled={parts.h !== '' && !allowed(hhmm(parts.h, x, ap))}>{x}</option>
+        ))}
       </select>
       <select value={parts.ap} onChange={(e) => emit({ ap: e.target.value })} aria-label={`${label} AM or PM`} disabled={parts.h === ''} className="time-ap">
         {parts.h === '' && <option value="">--</option>}
-        <option value="AM">AM</option>
-        <option value="PM">PM</option>
+        <option value="AM" disabled={!apOk('AM')}>AM</option>
+        <option value="PM" disabled={!apOk('PM')}>PM</option>
       </select>
     </span>
   );

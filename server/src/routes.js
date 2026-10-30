@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import { User, Student, Section, Enrollment, audit } from './models.js';
 import { COMPONENTS, MARKS, attendanceItems, cleanScale, computeGrades, scaleOf } from './grading.js';
 import { saveCredentials } from './credentials.js';
-import { cleanBlocks, cleanSchedule, legacyFields } from './schedule.js';
+import { HHMM_RE as HHMM, blocksOutside, cleanBlocks, cleanSchedule, legacyFields, workHoursOf } from './schedule.js';
 import { mailConfigured, sendStudentCredentials } from './mailer.js';
 import { buildClassRecord, facultyTerms, gradingFileName } from './classRecordExport.js';
 import { PROFILE_FIELDS, buildLoadingReport, loadingFileName } from './facultyLoading.js';
@@ -105,15 +105,31 @@ const faculty = express.Router();
 faculty.use(requireAuth, requirePasswordSet, requireRole('faculty'));
 
 // Weekly blocks besides classes (consultation hours, meetings…), for the weekly schedule.
-faculty.get('/schedule-blocks', wrap(async (req, res) => res.json({ blocks: req.user.scheduleBlocks || [] })));
+faculty.get('/schedule-blocks', wrap(async (req, res) => res.json({ blocks: req.user.scheduleBlocks || [], workHours: workHoursOf(req.user) })));
 faculty.put(
   '/schedule-blocks',
   wrap(async (req, res) => {
     const { rows, error } = cleanBlocks(req.body?.blocks);
     if (error) return res.status(400).json({ error });
+    const outside = blocksOutside(rows, workHoursOf(req.user));
+    if (outside) return res.status(400).json({ error: outside });
     req.user.scheduleBlocks = rows;
     await req.user.save();
     res.json({ blocks: rows });
+  })
+);
+// Time in / time out: admin, consultation and break blocks must fall inside these hours.
+faculty.put(
+  '/work-hours',
+  wrap(async (req, res) => {
+    const { start, end } = req.body || {};
+    if (!HHMM.test(String(start)) || !HHMM.test(String(end))) return res.status(400).json({ error: 'Choose a time in and a time out.' });
+    if (end <= start) return res.status(400).json({ error: 'Time out must be after time in.' });
+    const outside = blocksOutside(req.user.scheduleBlocks || [], { start, end });
+    if (outside) return res.status(400).json({ error: `${outside} Move or remove it first.` });
+    req.user.workHours = { start, end };
+    await req.user.save();
+    res.json({ workHours: { start, end } });
   })
 );
 

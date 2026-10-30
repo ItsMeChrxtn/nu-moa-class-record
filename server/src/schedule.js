@@ -62,3 +62,15 @@ export function cleanBlocks(input) {
   rows.sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || a.start.localeCompare(b.start));
   return { rows };
 }
+
+// A faculty member's time in / time out. Blocks (admin, consultation, break) must stay inside it.
+export const DEFAULT_WORK_HOURS = { start: '07:00', end: '16:00' };
+export const HHMM_RE = HHMM;
+export const workHoursOf = (user) => ({ ...DEFAULT_WORK_HOURS, ...(user.workHours?.start ? { start: user.workHours.start, end: user.workHours.end } : {}) });
+
+// The first block outside the work hours, as a message; null when all fit.
+export function blocksOutside(blocks, hours) {
+  const b = blocks.find((x) => x.start < hours.start || x.end > hours.end);
+  if (!b) return null;
+  return `${b.label || 'A block'} on ${b.day} (${to12(b.start)} – ${to12(b.end)}) is outside your work hours (${to12(hours.start)} – ${to12(hours.end)}).`;
+}

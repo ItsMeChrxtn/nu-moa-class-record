@@ -15,6 +15,8 @@ const userSchema = new Schema(
     lastLoginAt: Date,
     credentialsSentAt: Date, // when the current temporary password was emailed
     // Faculty: weekly blocks besides classes, shown on the weekly schedule.
+    // Faculty: time in / time out (HH:MM); admin, consultation and break blocks must fall inside. Default 7:00–16:00.
+    workHours: { start: String, end: String },
     // Faculty: details printed on the Faculty Loading Report (entered once, reused every export).
     loadingReport: {
       employeeId: String,

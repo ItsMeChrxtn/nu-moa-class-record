@@ -167,6 +167,7 @@ export default function FacultyHome() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [blocks, setBlocks] = useState([]);
+  const [workHours, setWorkHours] = useState(undefined);
   const [reporting, setReporting] = useState(false);
   const [view, setView] = useState(() => {
     try {
@@ -186,7 +187,12 @@ export default function FacultyHome() {
     api('/faculty/sections')
       .then((d) => setSections(d.sections))
       .catch((e) => setError(e.message));
-    api('/faculty/schedule-blocks').then((d) => setBlocks(d.blocks)).catch(() => {});
+    api('/faculty/schedule-blocks')
+      .then((d) => {
+        setBlocks(d.blocks);
+        setWorkHours(d.workHours);
+      })
+      .catch(() => {});
   }, []);
 
   if (error) return <ErrorState message={error} />;
@@ -257,7 +263,7 @@ export default function FacultyHome() {
         )}
 
         {sections.length > 0 && view === 'schedule' ? (
-          <Timetable sections={latest?.sections || []} blocks={blocks} onBlocksChange={setBlocks} termLabel={latest?.label} onExport={() => setReporting(true)} />
+          <Timetable sections={latest?.sections || []} blocks={blocks} onBlocksChange={setBlocks} termLabel={latest?.label} onExport={() => setReporting(true)} workHours={workHours} onWorkHoursChange={setWorkHours} />
         ) : sections.length === 0 ? (
           <EmptyState title="No sections yet">
             Create a section and import its class list from a PDF.

@@ -52,7 +52,10 @@ function layOut(blocks) {
 const WEEK_HOURS = 40; // full-time load per week
 const fmtH = (h) => `${Math.round(h * 100) / 100}`;
 
-export default function Timetable({ sections, blocks, onBlocksChange, termLabel, onExport }) {
+export const DEFAULT_WORK_HOURS = { start: '07:00', end: '16:00' };
+
+export default function Timetable({ sections, blocks, onBlocksChange, termLabel, onExport, workHours = DEFAULT_WORK_HOURS, onWorkHoursChange }) {
+  const [editingHours, setEditingHours] = useState(false);
   const { toast, confirm } = useUI();
   const [editing, setEditing] = useState(null); // { index } or { index: -1, kind } for a new block
   const colors = useMemo(() => sectionColors(sections), [sections]);
@@ -70,16 +73,17 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel,
   }, [sections, blocks]);
 
   const all = Object.values(byDay).flat();
-  // 7:00 AM – 6:00 PM, stretched to fit the earliest and latest class.
-  const first = Math.min(7 * 60, ...all.map((b) => Math.floor(b.start / 60) * 60));
-  const last = Math.max(18 * 60, ...all.map((b) => Math.ceil(b.end / 60) * 60));
+  // At least 7:00 AM – 6:00 PM, stretched to fit every block, plus an hour on each side of the work
+  // hours so the time before time-in and after time-out shows (shaded).
+  const first = Math.max(0, Math.min(7 * 60, Math.floor(toMin(workHours.start) / 60) * 60 - 60, ...all.map((b) => Math.floor(b.start / 60) * 60)));
+  const last = Math.min(24 * 60, Math.max(18 * 60, Math.ceil(toMin(workHours.end) / 60) * 60 + 60, ...all.map((b) => Math.ceil(b.end / 60) * 60)));
   const rows = (last - first) / SLOT;
   const span = (list) => list.reduce((h, b) => h + (b.end - b.start) / 60, 0);
   // Working hours = classes + admin/consultation blocks; break time is shown but never counted.
   const classHours = span(all.filter((b) => b.kind === 'class'));
-  const workHours = span(all.filter((b) => b.kind === 'block' && b.b.kind !== 'break'));
+  const adminHours = span(all.filter((b) => b.kind === 'block' && b.b.kind !== 'break'));
   const breakHours = span(all.filter((b) => b.kind === 'block' && b.b.kind === 'break'));
-  const total = classHours + workHours;
+  const total = classHours + adminHours;
   const today = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date().getDay()];
 
   async function save(next, message) {
@@ -128,11 +132,17 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel,
         </div>
         <div className="work-bar" aria-hidden="true">
           <span className="wb-class" style={{ width: `${Math.min(100, (classHours / Math.max(WEEK_HOURS, total)) * 100)}%` }} />
-          <span className="wb-work" style={{ width: `${Math.min(100, (workHours / Math.max(WEEK_HOURS, total)) * 100)}%` }} />
+          <span className="wb-work" style={{ width: `${Math.min(100, (adminHours / Math.max(WEEK_HOURS, total)) * 100)}%` }} />
         </div>
         <ul className="work-legend">
+          <li className="work-in-out">
+            <Icon name="clock" size={14} /> Work hours <strong>{to12(workHours.start)} – {to12(workHours.end)}</strong>
+            {onWorkHoursChange && (
+              <button type="button" className="link-btn" onClick={() => setEditingHours(true)}>Change</button>
+            )}
+          </li>
           <li><i className="wb-class" />Classes <strong>{fmtH(classHours)} h</strong></li>
-          <li><i className="wb-work" />Admin / consultation <strong>{fmtH(workHours)} h</strong></li>
+          <li><i className="wb-work" />Admin / consultation <strong>{fmtH(adminHours)} h</strong></li>
           <li><i className="wb-break" />Break time <strong>{fmtH(breakHours)} h</strong> <small>not counted</small></li>
         </ul>
       </div>
@@ -153,6 +163,8 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel,
           </div>
           {WEEK.map(([d]) => (
             <div key={d} className={`tt-col ${d === today ? 'is-today' : ''}`}>
+              {toMin(workHours.start) > first && <span className="tt-off" style={{ top: 0, height: ((toMin(workHours.start) - first) / SLOT) * ROW }} title="Before your time in" />}
+              {toMin(workHours.end) < last && <span className="tt-off" style={{ top: ((toMin(workHours.end) - first) / SLOT) * ROW, bottom: 0 }} title="After your time out" />}
               {byDay[d].map((b, i) => {
                 const style = {
                   top: ((b.start - first) / SLOT) * ROW,
@@ -183,6 +195,7 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel,
         <BlockModal
           block={editing.index >= 0 ? blocks[editing.index] : null}
           kind={editing.kind}
+          workHours={workHours}
           onClose={() => setEditing(null)}
           onSave={async (list) => {
             // Editing replaces this block with the first chosen day; any other days are added as copies.
@@ -208,7 +221,68 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel,
           }
         />
       )}
+      {editingHours && (
+        <WorkHoursModal
+          workHours={workHours}
+          onClose={() => setEditingHours(false)}
+          onSave={async (wh) => {
+            try {
+              const d = await api('/faculty/work-hours', { method: 'PUT', body: wh });
+              onWorkHoursChange(d.workHours);
+              toast(`Work hours set to ${to12(wh.start)} – ${to12(wh.end)}`);
+              setEditingHours(false);
+            } catch (e) {
+              toast(e.message, 'error');
+            }
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+function WorkHoursModal({ workHours, onSave, onClose }) {
+  const [form, setForm] = useState(workHours);
+  const [busy, setBusy] = useState(false);
+  const bad = !form.start || !form.end || form.end <= form.start;
+  return (
+    <Modal
+      title="Work hours"
+      subtitle="Your time in and time out. Admin, consultation and break blocks can only be set inside these hours."
+      icon="clock"
+      onClose={onClose}
+      width={460}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button
+            className="btn primary"
+            disabled={busy || bad}
+            onClick={async () => {
+              setBusy(true);
+              await onSave(form);
+              setBusy(false);
+            }}
+          >
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </>
+      }
+    >
+      <div style={{ display: 'grid', gap: 14 }}>
+        <div className="row-2">
+          <div className="field">
+            <span className="field-label">Time in</span>
+            <TimeInput value={form.start} onChange={(v) => setForm({ ...form, start: v })} label="Time in" />
+          </div>
+          <div className="field">
+            <span className="field-label">Time out</span>
+            <TimeInput value={form.end} onChange={(v) => setForm({ ...form, end: v })} label="Time out" />
+          </div>
+        </div>
+        {bad && <div className="alert error"><Icon name="alert" />Time out must be after time in.</div>}
+      </div>
+    </Modal>
   );
 }
 
@@ -221,19 +295,24 @@ const DAY_PRESETS = [
   ['Clear', []],
 ];
 
-function BlockModal({ block, kind = 'work', onSave, onDelete, onClose }) {
-  const [form, setForm] = useState(() =>
-    block
-      ? { kind: 'work', ...block }
-      : { kind, label: DEFAULT_LABEL[kind], day: 'MON', start: kind === 'break' ? '12:00' : '08:00', end: kind === 'break' ? '13:00' : '10:00' }
-  );
+// New blocks start inside the work hours: a break at noon, admin hours from time in (two hours).
+const clampTime = (t, wh) => (t < wh.start ? wh.start : t > wh.end ? wh.end : t);
+const addHours = (t, h) => `${String(Math.min(23, Number(t.slice(0, 2)) + h)).padStart(2, '0')}${t.slice(2)}`;
+
+function BlockModal({ block, kind = 'work', workHours = DEFAULT_WORK_HOURS, onSave, onDelete, onClose }) {
+  const [form, setForm] = useState(() => {
+    if (block) return { kind: 'work', ...block };
+    const start = clampTime(kind === 'break' ? '12:00' : workHours.start, workHours);
+    return { kind, label: DEFAULT_LABEL[kind], day: 'MON', start, end: clampTime(addHours(start, kind === 'break' ? 1 : 2), workHours) };
+  });
   // Switching the type also switches a default label, but keeps one the faculty typed.
   const setKind = (k) => setForm({ ...form, kind: k, label: !form.label || Object.values(DEFAULT_LABEL).includes(form.label) ? DEFAULT_LABEL[k] : form.label });
   // One block per chosen day, all with the same time and label.
   const [days, setDays] = useState(() => [block?.day || 'MON']);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
-  const bad = !form.start || !form.end || form.end <= form.start;
+  const outside = form.start && form.end && (form.start < workHours.start || form.end > workHours.end);
+  const bad = !form.start || !form.end || form.end <= form.start || outside;
   const ordered = WEEK.map(([d]) => d).filter((d) => days.includes(d));
   return (
     <Modal
@@ -306,14 +385,19 @@ function BlockModal({ block, kind = 'work', onSave, onDelete, onClose }) {
         <div className="row-2">
           <div className="field">
             <span className="field-label">Start</span>
-            <TimeInput value={form.start} onChange={(v) => setForm({ ...form, start: v })} label="Start time" />
+            <TimeInput value={form.start} onChange={(v) => setForm({ ...form, start: v })} label="Start time" min={workHours.start} max={workHours.end} />
           </div>
           <div className="field">
             <span className="field-label">End</span>
-            <TimeInput value={form.end} onChange={(v) => setForm({ ...form, end: v })} label="End time" />
+            <TimeInput value={form.end} onChange={(v) => setForm({ ...form, end: v })} label="End time" min={workHours.start} max={workHours.end} />
           </div>
         </div>
-        {bad && <div className="alert error"><Icon name="alert" />The end time must be after the start time.</div>}
+        {outside ? (
+          <div className="alert error"><Icon name="alert" />Outside your work hours ({to12(workHours.start)} – {to12(workHours.end)}). Pick a time inside them.</div>
+        ) : (
+          bad && <div className="alert error"><Icon name="alert" />The end time must be after the start time.</div>
+        )}
+        <p className="muted small">Your work hours: {to12(workHours.start)} – {to12(workHours.end)}. Times outside them can&apos;t be picked.</p>
       </div>
     </Modal>
   );
