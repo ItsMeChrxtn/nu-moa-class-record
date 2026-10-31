@@ -1492,3 +1492,24 @@ button.mark:active { transform: scale(0.92); }
   .px-fill.is-sweep { animation: px-sweep 2.8s steps(14) infinite alternate !important; }
 }
 .page-loader .px-loader { width: 460px; max-width: 100%; }
+
+/* Pixel loader in the system colours: white card, ink border + offset shadow, royal blue. */
+.px-loader {
+  --px-a: var(--ink); --px-b: var(--blue); --px-c: #3b82f6; --px-bg: var(--surface);
+  background: var(--px-bg); border: 1.5px solid var(--ink); border-radius: 14px; box-shadow: var(--hard-lg);
+}
+.px-title { background: linear-gradient(90deg, var(--ink), var(--blue) 70%); -webkit-background-clip: text; background-clip: text; }
+.px-dots i { color: var(--blue); -webkit-text-fill-color: var(--blue); }
+.px-bar { background: linear-gradient(90deg, var(--ink), var(--blue)); }
+.px-bar::before { background: var(--blue-soft); }
+.px-fill {
+  background:
+    repeating-conic-gradient(#ffffff 0% 25%, transparent 0% 50%) 0 0 / 8px 8px,
+    linear-gradient(90deg, var(--blue), #3b82f6);
+  background-size: 8px 8px, 420px 100%;
+}
+.px-foot { color: var(--ink-2); }
+.px-foot span:last-child { color: var(--blue); }
+.swal-backdrop.is-loading { background: #0f172a59; backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+.page-loader .px-loader { box-shadow: var(--hard-lg); }
+.px-foot span:first-child { color: var(--ink-2); }
