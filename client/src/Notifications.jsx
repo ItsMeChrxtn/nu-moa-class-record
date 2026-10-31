@@ -42,7 +42,7 @@ export default function NotificationBell() {
               const k = [...new Set(kinds)].sort((a) => (a === 'midterm' ? -1 : 1));
               return `${s.code}${s.subjectTitle ? ` · ${titleCase(s.subjectTitle)}` : ''}: ${k.join(' and ')} grade${k.length > 1 ? 's' : ''}`;
             });
-            toast(`${lines.join('\n')}\n\nYou can see ${fresh.length > 1 ? 'them' : 'it'} below. The bell keeps the list.`, 'info', 'Your grades are out! 🎉');
+            toast(`${lines.join('\n')}\n\nYou can see ${fresh.length > 1 ? 'them' : 'it'} below. The bell keeps the list.`, 'info', 'Your grades are now available');
             // Shown once; the bell keeps the list.
             api('/me/notifications/read', { method: 'POST' }).catch(() => {});
           }

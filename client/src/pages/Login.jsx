@@ -21,7 +21,7 @@ export default function Login() {
     setError('');
     try {
       const u = await login(username, password);
-      toast(u.mustChangePassword ? 'Please set a new password to continue.' : 'You are signed in.', 'success', `Welcome back, ${firstName(u.name)}! 👋`);
+      toast(u.mustChangePassword ? 'Please set a new password to continue.' : 'You are signed in.', 'success', `Welcome back, ${firstName(u.name)}`);
       navigate('/');
     } catch (err) {
       setError(err.message);

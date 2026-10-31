@@ -347,11 +347,13 @@ export function Menu({ label, icon = 'more', items, align = 'right' }) {
   );
 }
 
+// Shown while a page loads its data: the same look as the loading popup, in the page.
 export function PageLoader({ label = 'Loading…' }) {
   return (
     <div className="page-loader">
-      <span className="spinner" />
-      <span>{label}</span>
+      <SwalCard type="loading" title={label} backdrop={false}>
+        <p>Please wait while we get your data.</p>
+      </SwalCard>
     </div>
   );
 }
@@ -400,8 +402,8 @@ export function Modal({ title, subtitle, icon, tone = 'brand', onClose, children
 
 const UIContext = createContext(null);
 
-const MIN_RUN = 900; // ms the runners get before reaching 100%
-const CELEBRATE = 1300; // ms of celebrating at 100%
+const MIN_RUN = 600; // ms the loading popup stays at least, so it never just flickers
+const DONE_PAUSE = 250; // ms showing 100% before the result popup
 const ALERT_MS = 2200; // a success popup closes itself after this
 
 export function UIProvider({ children }) {
@@ -445,8 +447,8 @@ export function UIProvider({ children }) {
           setProgress(null);
           return;
         }
-        setProgress((p) => p && { ...p, value: 1, done: true });
-        setTimeout(() => alive && !st.active.size && setProgress(null), CELEBRATE);
+        setProgress((p) => p && { ...p, value: 1 });
+        setTimeout(() => alive && !st.active.size && setProgress(null), DONE_PAUSE);
       }, wait);
     };
     const onStart = (e) => {

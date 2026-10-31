@@ -37,7 +37,7 @@ export default function Layout() {
                   const name = firstName(user.name);
                   await logout();
                   navigate('/login');
-                  toast(`See you next time, ${name}!`, 'success', 'Logged out 👋');
+                  toast(`See you next time, ${name}!`, 'success', 'Logged out');
                 }}
               >
                 <Icon name="logout" size={16} />
