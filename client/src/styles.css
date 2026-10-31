@@ -1442,3 +1442,53 @@ button.mark:active { transform: scale(0.92); }
 }
 .page-loader { font-family: var(--body); font-size: 1rem; color: var(--ink); gap: 0; flex-direction: column; }
 .page-loader .swal p { font-family: var(--body); }
+
+/* ───────────────────────── Pixel loading (like a retro game) ───────────────────────── */
+.px-loader {
+  --px-a: #22d3ee; --px-b: #a855f7; --px-c: #ec4899;
+  width: min(460px, 100%); padding: 34px 32px 24px; border-radius: 12px; background: #1e2235;
+  box-shadow: 0 24px 60px -20px #0f172a99, inset 0 0 0 1px #ffffff10;
+  font-family: 'Press Start 2P', var(--mono); image-rendering: pixelated; animation: swal-in 0.2s ease-out both;
+}
+.px-title {
+  text-align: center; font-size: 1.6rem; line-height: 1.3; letter-spacing: 0.06em;
+  background: linear-gradient(90deg, var(--px-a), var(--px-b) 55%, var(--px-c)); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.px-dots i { font-style: normal; animation: px-blink 1.2s steps(1) infinite; }
+.px-dots i:nth-child(2) { animation-delay: 0.3s; }
+.px-dots i:nth-child(3) { animation-delay: 0.6s; }
+@keyframes px-blink { 0%, 100% { opacity: 0; } 30%, 80% { opacity: 1; } }
+
+/* The bar: a stepped gradient border (pixel corners) around a checkered fill. */
+.px-bar {
+  position: relative; height: 34px; margin-top: 22px; padding: 6px;
+  background: linear-gradient(90deg, var(--px-a), var(--px-b) 55%, var(--px-c));
+  clip-path: polygon(0 6px, 6px 6px, 6px 0, calc(100% - 6px) 0, calc(100% - 6px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 6px), 0 calc(100% - 6px));
+}
+.px-bar::before { content: ''; position: absolute; inset: 6px; background: #1e2235; }
+.px-fill {
+  position: relative; z-index: 1; display: block; height: 100%; min-width: 8px; margin: 0;
+  background:
+    repeating-conic-gradient(#1e2235 0% 25%, transparent 0% 50%) 0 0 / 8px 8px,
+    linear-gradient(90deg, var(--px-a), var(--px-b) 55%, var(--px-c));
+  background-size: 8px 8px, 420px 100%;
+  transition: width 0.2s steps(6);
+}
+/* Unknown length (page loading): a block of checkers sweeps back and forth. */
+.px-fill.is-sweep { width: 34%; animation: px-sweep 1.4s steps(14) infinite alternate; }
+@keyframes px-sweep { from { transform: translateX(0); } to { transform: translateX(194%); } }
+.px-foot { display: flex; justify-content: space-between; gap: 12px; margin-top: 16px; font-size: 0.58rem; line-height: 1.6; color: #a5b4fc; letter-spacing: 0.04em; text-transform: uppercase; }
+.px-foot span:last-child { color: #f9a8d4; }
+
+.swal-backdrop.is-loading { background: #0b0d1aa6; }
+.page-loader .px-loader { box-shadow: 0 16px 40px -20px #0f172a80; }
+
+@media (max-width: 480px) {
+  .px-loader { padding: 26px 20px 20px; }
+  .px-title { font-size: 1.15rem; }
+  .px-bar { height: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .px-fill.is-sweep { animation: px-sweep 2.8s steps(14) infinite alternate !important; }
+}
+.page-loader .px-loader { width: 460px; max-width: 100%; }

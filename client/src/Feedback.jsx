@@ -42,17 +42,32 @@ export function SwalCard({ type, title, children, onClose, label, backdrop = tru
   );
 }
 
+// Pixel-style loader: "LOADING..." over a pixel-bordered bar with a checkered fill.
+// value 0–1 fills the bar; without a value the checkers sweep back and forth (page loading).
+export function PixelLoader({ label, value }) {
+  const pct = value == null ? null : Math.round(value * 100);
+  return (
+    <div className="px-loader" role={pct == null ? 'status' : 'progressbar'} aria-label={label} aria-valuemin={pct == null ? undefined : 0} aria-valuemax={pct == null ? undefined : 100} aria-valuenow={pct ?? undefined}>
+      <div className="px-title" aria-hidden="true">
+        LOADING<span className="px-dots"><i>.</i><i>.</i><i>.</i></span>
+      </div>
+      <div className="px-bar">
+        <span className={`px-fill ${pct == null ? 'is-sweep' : ''}`} style={pct == null ? undefined : { width: `${pct}%` }} />
+      </div>
+      <div className="px-foot">
+        <span>{label}</span>
+        {pct != null && <span>{pct}%</span>}
+      </div>
+    </div>
+  );
+}
+
 // progress: { label, value 0–1 }
 export function ProgressOverlay({ progress }) {
-  const pct = Math.round(progress.value * 100);
   return (
-    <SwalCard type="loading" title={progress.label} label={`${progress.label} ${pct}%`}>
-      <p>Please wait while we finish this.</p>
-      <div className="swal-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
-        <span style={{ width: `${pct}%` }} />
-      </div>
-      <span className="swal-pct">{pct}%</span>
-    </SwalCard>
+    <div className="swal-backdrop is-loading">
+      <PixelLoader label={progress.label} value={progress.value} />
+    </div>
   );
 }
 

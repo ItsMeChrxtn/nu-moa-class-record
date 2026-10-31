@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { activity } from './api.js';
-import { ProgressOverlay, SwalCard, SweetAlert } from './Feedback.jsx';
+import { PixelLoader, ProgressOverlay, SwalCard, SweetAlert } from './Feedback.jsx';
 
 const paths = {
   logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
@@ -351,9 +351,7 @@ export function Menu({ label, icon = 'more', items, align = 'right' }) {
 export function PageLoader({ label = 'Loading…' }) {
   return (
     <div className="page-loader">
-      <SwalCard type="loading" title={label} backdrop={false}>
-        <p>Please wait while we get your data.</p>
-      </SwalCard>
+      <PixelLoader label={label === 'Loading…' ? 'Getting your data…' : label} />
     </div>
   );
 }
