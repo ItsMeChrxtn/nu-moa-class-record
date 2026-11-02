@@ -12,6 +12,7 @@ import JSZip from 'jszip';
 import { Section, Enrollment } from './models.js';
 import { FAIL_EQ, attendanceItems, scaleOf } from './grading.js';
 import { to12 } from './schedule.js';
+import { surnameOf } from './names.js';
 
 export const TEMPLATE_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates/class-record-template.xlsx');
 
@@ -166,7 +167,7 @@ export function gradingFileName(faculty, sections) {
 }
 
 function baseFileName(faculty, sections) {
-  const last = (faculty.name.includes(',') ? faculty.name.split(',')[0] : faculty.name.split(/\s+/).slice(-2).join(' ')).trim().toUpperCase();
+  const last = surnameOf(faculty.name).toUpperCase();
   const terms = [...new Set(sections.map((s) => `${s.term}|${s.academicYear}`))];
   let suffix = new Date().toISOString().slice(0, 10);
   const [term, ay] = terms.length === 1 ? terms[0].split('|') : [];

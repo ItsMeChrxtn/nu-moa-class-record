@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { SheetXml } from './classRecordExport.js';
+import { splitPersonName, surnameOf } from './names.js';
 
 export const WORKWEEK_TEMPLATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates/workweek-template.xlsx');
 const FIRST_ROW = 13; // 7:00 AM
@@ -25,14 +26,17 @@ const clock = (t) => {
 const round2 = (n) => Math.round(n * 100) / 100;
 const titleCase = (s) => s.toLowerCase().replace(/(^|[\s(-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
 // "DEL ROSARIO, CHRISTIAN LLOYD E." -> "Christian Lloyd E. Del Rosario"
-export const displayName = (n = '') => titleCase(n.includes(',') ? `${n.slice(n.indexOf(',') + 1).trim()} ${n.slice(0, n.indexOf(',')).trim()}` : n);
+export const displayName = (n = '') => {
+  const { surname, given } = splitPersonName(n);
+  return titleCase([given, surname].filter(Boolean).join(' '));
+};
 
 function termNumber(term) {
   return { first: 1, second: 2, third: 3 }[String(term || '').toLowerCase().split(/\s+/)[0]];
 }
 
 export function workWeekFileName(faculty, term, academicYear) {
-  const last = titleCase((faculty.name.includes(',') ? faculty.name.split(',')[0] : faculty.name.split(/\s+/).slice(-1)[0]).trim());
+  const last = titleCase(surnameOf(faculty.name)); // the whole surname: Del Rosario, Dela Cruz …
   const y = String(academicYear || '').match(/\d{2}(\d{2})\s*-\s*\d{2}(\d{2})/);
   const n = termNumber(term);
   return `${last}_workweek_${n ? `T${n}` : ''}${y ? `AY${y[1]}-${y[2]}` : ''}.xlsx`.replace(/[\\/:*?"<>|]/g, '-');

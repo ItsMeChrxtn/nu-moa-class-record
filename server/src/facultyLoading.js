@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { SheetXml } from './classRecordExport.js';
 import { DAYS } from './schedule.js';
+import { surnameFirst, surnameOf } from './names.js';
 
 export const LOADING_TEMPLATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates/faculty-loading-template.xlsx');
 const FIRST_ROW = 6;
@@ -51,7 +52,7 @@ function termParts(term, academicYear) {
 }
 
 export function loadingFileName(faculty, term, academicYear) {
-  const last = (faculty.name.includes(',') ? faculty.name.split(',')[0] : faculty.name.split(/\s+/).slice(-1)[0]).trim().toUpperCase();
+  const last = surnameOf(faculty.name).toUpperCase(); // the whole surname: DEL ROSARIO, DELA CRUZ …
   return `${last}_${termParts(term, academicYear).file}_STUDENT-CLASS-SCHEDULES.xlsx`.replace(/[\\/:*?"<>|]/g, '-');
 }
 
@@ -73,7 +74,7 @@ export async function buildLoadingReport(faculty, sections, blocks, profile = {}
   if (meetings.length > LAST_ROW - FIRST_ROW + 1) notes.push(`Only the first ${LAST_ROW - FIRST_ROW + 1} of ${meetings.length} class meetings fit the report.`);
 
   ws.set('C1', profile.employeeId || '');
-  ws.set('C2', faculty.name.toUpperCase());
+  ws.set('C2', surnameFirst(faculty.name).toUpperCase()); // DEL ROSARIO, CHRISTIAN LLOYD E.
   ws.set('C3', (profile.classification || '').toUpperCase());
   if (profile.department) ws.set('K1', profile.department.toUpperCase());
   ws.set('K3', termParts(term, academicYear).header);
