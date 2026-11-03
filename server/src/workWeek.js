@@ -81,19 +81,39 @@ export async function buildWorkWeek(faculty, sections, blocks, profile = {}, { t
       merges.push(`${col}${FIRST_ROW}:${col}${LAST_ROW}`);
       continue;
     }
-    let taken = FIRST_ROW - 1; // last row already used in this column
+    // Like the school's sheet, a block runs from the row labelled with its start time to the row
+    // labelled with its end time (7:00–11:00 fills 7:00 … 11:00). A block that starts when the one
+    // above ends begins on the next row. Times between labels round outwards.
+    const rowAt = (min, round) => FIRST_ROW + round((min - DAY_START) / SLOT);
+    const isClass = (x) => x.kind === 'f2f' || x.kind === 'remote';
+    // 1. Each block's full span, start row to end row.
+    const spans = [];
+    let busyUntil = -1; // end time (minutes) of the last block kept
     for (const x of list) {
-      // Rows the block covers, rounded out to whole 20-minute slots and kept inside the grid.
-      const top = Math.max(FIRST_ROW, FIRST_ROW + Math.floor((x.start - DAY_START) / SLOT));
-      const bottom = Math.min(LAST_ROW, FIRST_ROW + Math.ceil((x.end - DAY_START) / SLOT) - 1);
-      if (bottom < top) continue;
-      if (top <= taken) {
+      if (x.start < busyUntil) {
         notes.push(`${day}: "${x.text.split('\n')[0]}" overlaps an earlier block and was left out.`);
         continue;
       }
+      const top = Math.max(FIRST_ROW, rowAt(x.start, Math.floor));
+      const bottom = Math.min(LAST_ROW, rowAt(x.end, Math.ceil));
+      if (bottom < top) continue;
+      busyUntil = x.end;
+      spans.push({ x, top, bottom });
+    }
+    // 2. Two blocks that meet share a row: a class keeps it (the admin hour or break before or
+    //    after it gives it up), otherwise the earlier block keeps it.
+    for (let i = 1; i < spans.length; i++) {
+      const prev = spans[i - 1];
+      const cur = spans[i];
+      if (cur.top > prev.bottom) continue;
+      if (isClass(cur.x) && !isClass(prev.x) && prev.bottom - 1 >= prev.top) prev.bottom = cur.top - 1;
+      else cur.top = prev.bottom + 1;
+    }
+    // 3. Write them.
+    for (const { x, top, bottom } of spans) {
+      if (bottom < top) continue;
       for (let r = top; r <= bottom; r++) ws.set(`${col}${r}`, r === top ? x.text : null, { style: style[x.kind] });
       if (bottom > top) merges.push(`${col}${top}:${col}${bottom}`);
-      taken = bottom;
     }
   }
 

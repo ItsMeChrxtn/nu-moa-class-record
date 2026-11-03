@@ -9,6 +9,7 @@
     "import": "node scripts/import-excel.js",
     "create-admin": "node scripts/create-admin.js",
     "export-grades": "node scripts/export-grades.js",
+    "seed-demo": "node scripts/seed-demo.js",
     "test": "node --test"
   },
   "dependencies": {
