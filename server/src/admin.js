@@ -12,7 +12,7 @@ admin.use(requireAuth, requirePasswordSet, requireRole('admin'));
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const str = (v, max = 120) => String(v ?? '').trim().slice(0, max);
 // Faculty sign in with their email (any provider, e.g. Gmail), which is stored as their username.
-const FACULTY_EMAIL = /^[a-z0-9][a-z0-9._%+-]{0,63}@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/;
+export const FACULTY_EMAIL = /^[a-z0-9][a-z0-9._%+-]{0,63}@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/;
 const EMAIL_ERROR = 'Enter the faculty member’s email address (e.g. juan.delacruz@gmail.com).';
 const email = (v) => str(v, 100).toLowerCase();
 const sectionLabel = (s) => [s.code, s.term, s.academicYear].filter(Boolean).join(' · ');

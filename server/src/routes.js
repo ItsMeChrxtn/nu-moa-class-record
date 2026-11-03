@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
@@ -6,12 +7,12 @@ import { User, Student, Section, Enrollment, Notification, audit, notifyGrades }
 import { COMPONENTS, DEFAULT_WEIGHTS, MARKS, attendanceItems, cleanScale, computeGrades, scaleOf } from './grading.js';
 import { saveCredentials } from './credentials.js';
 import { HHMM_RE as HHMM, blocksOutside, cleanBlocks, cleanSchedule, legacyFields, workHoursOf } from './schedule.js';
-import { mailConfigured, sendStudentCredentials } from './mailer.js';
+import { mailConfigured, sendPasswordReset, sendStudentCredentials } from './mailer.js';
 import { buildClassRecord, facultyTerms, gradingFileName } from './classRecordExport.js';
 import { PROFILE_FIELDS, buildLoadingReport, loadingFileName } from './facultyLoading.js';
 import { buildWorkWeek, workWeekFileName } from './workWeek.js';
 import JSZip from 'jszip';
-import admin from './admin.js';
+import admin, { FACULTY_EMAIL } from './admin.js';
 import {
   clearSession,
   hashPassword,
@@ -68,8 +69,90 @@ router.post(
       return res.status(400).json({ error: 'The new password must be different from the current one.' });
     req.user.passwordHash = await hashPassword(newPassword);
     req.user.mustChangePassword = false;
+    req.user.resetTokenHash = undefined; // an emailed reset link stops working once the password changes
+    req.user.resetTokenExpires = undefined;
     await req.user.save();
     res.json({ user: publicUser(req.user) });
+  })
+);
+
+// ---------- Forgot password ----------
+// The user types their student number or email; a one-hour link goes to the email on file
+// (faculty: their sign-in email; students: the email from the class list). The answer is the same
+// whether or not the account exists, so the form can't be used to find out who has one.
+
+const forgotLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, message: { error: 'Too many reset requests. Please try again in 15 minutes.' } });
+const RESET_MS = 60 * 60 * 1000;
+const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+
+async function accountFor(login) {
+  const id = String(login || '').trim().toLowerCase().slice(0, 100);
+  if (!id) return {};
+  let user = await User.findOne({ username: id });
+  if (!user && id.includes('@')) {
+    const students = await Student.find({ email: id }).select('_id');
+    if (students.length) user = await User.findOne({ role: 'student', student: { $in: students.map((s) => s._id) } });
+  }
+  if (!user || user.disabled) return {};
+  if (user.role === 'student') {
+    const s = await Student.findById(user.student).select('email');
+    return { user, email: FACULTY_EMAIL.test(s?.email || '') ? s.email : null };
+  }
+  return { user, email: FACULTY_EMAIL.test(user.username) ? user.username : null };
+}
+
+router.post(
+  '/auth/forgot-password',
+  forgotLimiter,
+  wrap(async (req, res) => {
+    const { user, email } = await accountFor(req.body?.username);
+    // One email a minute per account at most.
+    const recent = user?.resetTokenExpires && user.resetTokenExpires - Date.now() > RESET_MS - 60 * 1000;
+    if (user && email && !recent) {
+      const token = crypto.randomBytes(32).toString('base64url');
+      user.resetTokenHash = hashToken(token);
+      user.resetTokenExpires = new Date(Date.now() + RESET_MS);
+      await user.save();
+      const mail = await sendPasswordReset({ email, name: user.name, token });
+      if (!mail.sent) console.error(`Password reset email to ${email} failed: ${mail.error || 'email is not set up'}`);
+      audit(user, 'auth.forgot-password', `${user.name} (${user.username})`, mail.sent ? 'reset link emailed' : `email failed: ${mail.error || 'not set up'}`);
+    }
+    res.json({ ok: true });
+  })
+);
+
+async function userForToken(token) {
+  if (typeof token !== 'string' || token.length < 20) return null;
+  const user = await User.findOne({ resetTokenHash: hashToken(token), resetTokenExpires: { $gt: new Date() } });
+  return user && !user.disabled ? user : null;
+}
+
+router.post(
+  '/auth/reset-password/check',
+  loginLimiter,
+  wrap(async (req, res) => {
+    const user = await userForToken(req.body?.token);
+    if (!user) return res.status(400).json({ error: 'This reset link is invalid or has expired. Please ask for a new one.' });
+    res.json({ name: user.name, username: user.username });
+  })
+);
+
+router.post(
+  '/auth/reset-password',
+  loginLimiter,
+  wrap(async (req, res) => {
+    const { token, newPassword } = req.body || {};
+    const user = await userForToken(token);
+    if (!user) return res.status(400).json({ error: 'This reset link is invalid or has expired. Please ask for a new one.' });
+    if (typeof newPassword !== 'string' || newPassword.length < 8)
+      return res.status(400).json({ error: 'The new password must be at least 8 characters.' });
+    user.passwordHash = await hashPassword(newPassword);
+    user.mustChangePassword = false;
+    user.resetTokenHash = undefined;
+    user.resetTokenExpires = undefined;
+    await user.save();
+    audit(user, 'auth.reset-password', `${user.name} (${user.username})`, 'new password set from the emailed link');
+    res.json({ ok: true, username: user.username });
   })
 );
 
@@ -611,6 +694,57 @@ faculty.put(
     req.user.loadingReport = details;
     await req.user.save();
     res.json({ details });
+  })
+);
+
+// The faculty member's own details. The employee ID is the same one printed on the schedule files.
+// Changing the email changes the sign-in, so it needs the current password.
+const PHONE_RE = /^[0-9+()\-\s]{7,20}$/;
+const profileOf = (u) => ({
+  name: u.name,
+  email: FACULTY_EMAIL.test(u.username) ? u.username : '',
+  username: u.username,
+  employeeId: u.loadingReport?.employeeId || '',
+  phone: u.phone || '',
+});
+faculty.get('/profile', wrap(async (req, res) => res.json({ profile: profileOf(req.user) })));
+faculty.put(
+  '/profile',
+  wrap(async (req, res) => {
+    const b = req.body || {};
+    const u = req.user;
+    const changes = [];
+    if (b.name !== undefined) {
+      const name = str(b.name, 100).replace(/\s+/g, ' ');
+      if (!name) return res.status(400).json({ error: 'Enter your full name.' });
+      if (name !== u.name) changes.push('name');
+      u.name = name;
+    }
+    if (b.email !== undefined) {
+      const email = str(b.email, 100).toLowerCase();
+      if (!FACULTY_EMAIL.test(email)) return res.status(400).json({ error: 'Enter a valid email address, e.g. juan.delacruz@gmail.com.' });
+      if (email !== u.username) {
+        if (!(await bcrypt.compare(String(b.currentPassword || ''), u.passwordHash)))
+          return res.status(400).json({ error: 'Enter your current password to change your email.' });
+        if (await User.exists({ username: email })) return res.status(409).json({ error: `${email} already has an account.` });
+        changes.push(`sign-in ${u.username} → ${email}`);
+        u.username = email;
+      }
+    }
+    if (b.employeeId !== undefined) {
+      const id = str(b.employeeId, 40);
+      if (id !== (u.loadingReport?.employeeId || '')) changes.push('employee ID');
+      u.set('loadingReport.employeeId', id);
+    }
+    if (b.phone !== undefined) {
+      const phone = str(b.phone, 20);
+      if (phone && !PHONE_RE.test(phone)) return res.status(400).json({ error: 'Enter a valid contact number, e.g. 0917 123 4567.' });
+      if (phone !== (u.phone || '')) changes.push('contact number');
+      u.phone = phone;
+    }
+    await u.save();
+    if (changes.length) audit(u, 'faculty.profile', `${u.name} (${u.username})`, changes.join('; '));
+    res.json({ profile: profileOf(u), user: publicUser(u) });
   })
 );
 

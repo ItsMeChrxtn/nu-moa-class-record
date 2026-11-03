@@ -14,6 +14,10 @@ const userSchema = new Schema(
     disabled: { type: Boolean, default: false }, // set by an admin; blocks sign-in
     lastLoginAt: Date,
     credentialsSentAt: Date, // when the current temporary password was emailed
+    phone: String, // faculty: contact number, edited on their profile
+    // "Forgot password": a one-hour link emailed to the user. Only the SHA-256 of the token is kept.
+    resetTokenHash: String,
+    resetTokenExpires: Date,
     // Faculty: weekly blocks besides classes, shown on the weekly schedule.
     // Faculty: time in / time out (HH:MM); admin, consultation and break blocks must fall inside. Default 7:00–16:00.
     workHours: { start: String, end: String },

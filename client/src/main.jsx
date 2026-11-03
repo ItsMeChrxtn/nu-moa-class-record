@@ -5,6 +5,8 @@ import { AuthProvider, useAuth } from './auth.jsx';
 import Layout from './Layout.jsx';
 import Login from './pages/Login.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
+import { ForgotPassword, ResetPassword } from './pages/ForgotPassword.jsx';
+import Profile from './pages/Profile.jsx';
 import AdminHome from './pages/AdminHome.jsx';
 import FacultyHome from './pages/FacultyHome.jsx';
 import SectionRecord from './pages/SectionRecord.jsx';
@@ -37,11 +39,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route element={<Layout />}>
               <Route path="/" element={<Home />} />
               <Route path="/change-password" element={<ChangePassword />} />
               <Route path="/admin" element={<Guard role="admin"><AdminHome /></Guard>} />
               <Route path="/faculty" element={<Guard role="faculty"><FacultyHome /></Guard>} />
+              <Route path="/faculty/profile" element={<Guard role="faculty"><Profile /></Guard>} />
               <Route path="/faculty/sections/:id" element={<Guard role="faculty"><SectionRecord /></Guard>} />
               <Route path="/records" element={<Guard role="student"><StudentRecords /></Guard>} />
             </Route>

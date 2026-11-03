@@ -21,13 +21,21 @@ export default function Layout() {
           {user && (
             <div className="topbar-user">
               {user.role === 'student' && !user.mustChangePassword && <NotificationBell />}
-              <div className="user-pill">
-                <Avatar name={user.name} size={32} />
-                <span className="user-meta hide-sm">
-                  <strong>{titleCase(user.name)}</strong>
-                  <small>{{ admin: 'Administrator', faculty: 'Faculty' }[user.role] || user.username}</small>
-                </span>
-              </div>
+              {(() => {
+                const pill = (
+                  <>
+                    <Avatar name={user.name} size={32} />
+                    <span className="user-meta hide-sm">
+                      <strong>{titleCase(user.name)}</strong>
+                      <small>{user.role === 'faculty' && !user.mustChangePassword ? 'My profile' : { admin: 'Administrator', faculty: 'Faculty' }[user.role] || user.username}</small>
+                    </span>
+                  </>
+                );
+                // Faculty open their profile from here.
+                return user.role === 'faculty' && !user.mustChangePassword
+                  ? <Link to="/faculty/profile" className="user-pill" title="Edit my profile">{pill}</Link>
+                  : <div className="user-pill">{pill}</div>;
+              })()}
               <button
                 className="btn glass"
                 title="Log out"

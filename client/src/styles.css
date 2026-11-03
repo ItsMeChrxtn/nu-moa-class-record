@@ -1525,3 +1525,13 @@ button.mark:active { transform: scale(0.92); }
 .mode-option:has(input:focus-visible) { box-shadow: var(--focus); }
 .term-progress.single { grid-template-columns: 1fr; }
 @media (max-width: 520px) { .mode-choice { grid-template-columns: 1fr; } }
+
+/* ───────────────────────── Profile & password recovery ───────────────────────── */
+.field-hint { color: var(--ink-3); font-size: 0.78rem; }
+a.user-pill { color: inherit; text-decoration: none; transition: border-color 0.15s, box-shadow 0.15s; }
+a.user-pill:hover { border-color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
+.auth-note a, .auth-foot a { color: var(--blue); font-weight: 700; text-decoration: none; }
+.auth-note a:hover, .auth-foot a:hover { text-decoration: underline; }
+.auth-form > .btn.block:not(.primary) { height: 46px; }
+.profile-card h2 { text-transform: none; }
+@media (max-width: 520px) { .profile-card .row-2 { grid-template-columns: 1fr; } }

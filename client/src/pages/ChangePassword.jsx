@@ -4,9 +4,9 @@ import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { Hero, Icon, firstName } from '../ui.jsx';
 
-const LABELS = ['', 'Weak', 'Fair', 'Good', 'Strong'];
+export const LABELS = ['', 'Weak', 'Fair', 'Good', 'Strong'];
 
-function strength(pw) {
+export function strength(pw) {
   if (!pw) return 0;
   let s = 0;
   if (pw.length >= 8) s++;

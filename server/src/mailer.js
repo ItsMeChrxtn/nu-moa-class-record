@@ -77,6 +77,40 @@ export function sendStudentCredentials({ email, name, studentNo, tempPassword, s
   });
 }
 
+// "Forgot password": a link that lets the user choose a new password (valid for one hour).
+export function sendPasswordReset({ email, name, token }) {
+  const who = givenName(name);
+  const link = `${appUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+  const text = [
+    `Hi ${who},`,
+    '',
+    'Someone (hopefully you) asked to reset the password of your NU MOA Class Record account.',
+    'Open this link to choose a new password. It works once and expires in 1 hour:',
+    '',
+    link,
+    '',
+    'If you did not ask for this, you can ignore this email; your password stays the same.',
+  ].join('\n');
+
+  const html = `<!doctype html><html><body style="margin:0;background:#f4f5f7;font-family:Inter,Segoe UI,Arial,sans-serif;color:#0f172a">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px"><tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1.5px solid #0f172a;border-radius:16px">
+      <tr><td style="padding:28px 28px 8px">
+        <div style="font-family:'JetBrains Mono',Consolas,monospace;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#1d4ed8">&#9632; NU MOA &middot; Class Record</div>
+        <h1 style="margin:14px 0 0;font-size:26px;line-height:1.1;font-weight:900;text-transform:uppercase;letter-spacing:-0.5px">Reset your <span style="color:#1d4ed8">password.</span></h1>
+        <p style="margin:16px 0 0;font-size:15px;line-height:1.55;color:#475569">Hi ${esc(who)}, someone (hopefully you) asked to reset the password of your Class Record account. Click the button to choose a new one. The link works once and expires in <strong>1 hour</strong>.</p>
+      </td></tr>
+      <tr><td style="padding:20px 28px 8px">
+        <a href="${esc(link)}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 22px;border:1.5px solid #0f172a;border-radius:10px;box-shadow:4px 4px 0 #0f172a">Choose a new password</a>
+      </td></tr>
+      <tr><td style="padding:14px 28px 0;font-size:12px;line-height:1.5;color:#94a3b8;word-break:break-all">Or paste this link into your browser:<br><span style="font-family:'JetBrains Mono',Consolas,monospace;color:#475569">${esc(link)}</span></td></tr>
+      <tr><td style="padding:16px 28px 26px;font-size:13px;line-height:1.5;color:#94a3b8">If you did not ask for this, you can ignore this email. Your password stays the same.</td></tr>
+    </table>
+  </td></tr></table></body></html>`;
+
+  return sendMail({ to: email, toName: titleCase(name), subject: 'Reset your Class Record password', html, text });
+}
+
 function sendCredentials({ to, name, subject, headingHtml, greeting, intro, idLabel, idValue, tempPassword, contact }) {
   const url = appUrl();
   const text = [

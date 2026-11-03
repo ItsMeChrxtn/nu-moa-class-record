@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { BrandMark, Icon, firstName, useUI } from '../ui.jsx';
 
@@ -85,7 +85,9 @@ export default function Login() {
           <button className="btn primary block" disabled={busy || !username || !password}>
             {busy ? <span className="spinner" style={{ borderColor: '#fff6', borderTopColor: '#fff' }} /> : 'Show my grades'}
           </button>
-          <p className="auth-note">Faculty: sign in with your email. Forgot your password? Ask your faculty or the administrator to reset it.</p>
+          <p className="auth-note">
+            Faculty: sign in with your email. <Link to="/forgot-password">Forgot your password?</Link>
+          </p>
         </form>
       </main>
 
