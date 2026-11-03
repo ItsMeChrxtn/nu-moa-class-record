@@ -39,15 +39,18 @@ export default function SectionRecord() {
   const allItems = useMemo(() => (data ? sortItems(data.items) : []), [data]);
   // Finals opens once the midterms are graded (the Midterm Performance Task has scores),
   // or when finals items already exist.
+  // A final-only subject has no midterm: everything is in Finals, which is always open.
+  const finalOnly = data?.section.gradingMode === 'final';
   const finalsOpen = useMemo(() => {
     if (!data) return false;
+    if (data.section.gradingMode === 'final') return true;
     const mptScored = data.items.some((it) => it.component === 'MPT' && data.rows.some((r) => r.scores[it.id] != null));
     return mptScored || data.items.some((it) => !it.virtual && termOf(it) === 'POST');
   }, [data]);
   // With no choice made yet, open the latest term that is open.
-  const tab = view === 'attendance' ? 'attendance' : finalsOpen && view !== 'MID' ? 'POST' : 'MID';
+  const tab = view === 'attendance' ? 'attendance' : finalOnly || (finalsOpen && view !== 'MID') ? 'POST' : 'MID';
   const term = tab === 'attendance' ? 'MID' : tab;
-  const items = useMemo(() => allItems.filter((it) => termOf(it) === term), [allItems, term]);
+  const items = useMemo(() => (finalOnly ? allItems : allItems.filter((it) => termOf(it) === term)), [allItems, term, finalOnly]);
   const groups = useMemo(() => groupItems(items), [items]);
   // First item of each component group gets a vertical rule.
   const groupStarts = useMemo(() => new Set(groups.map((g) => g.items[0].id)), [groups]);
@@ -244,12 +247,14 @@ export default function SectionRecord() {
         ) : (
           <>
           <div className="view-tabs" role="tablist">
-            <button role="tab" aria-selected={tab === 'MID'} onClick={() => setView('MID')}>
-              <Icon name="chart" size={15} /> Midterms
-            </button>
+            {!finalOnly && (
+              <button role="tab" aria-selected={tab === 'MID'} onClick={() => setView('MID')}>
+                <Icon name="chart" size={15} /> Midterms
+              </button>
+            )}
             {finalsOpen ? (
               <button role="tab" aria-selected={tab === 'POST'} onClick={() => setView('POST')}>
-                <Icon name="award" size={15} /> Finals
+                <Icon name="award" size={15} /> {finalOnly ? 'Final grade' : 'Finals'}
               </button>
             ) : (
               <span className="tab-hint">
@@ -267,8 +272,8 @@ export default function SectionRecord() {
           <div className="card table-card">
             <div className="table-toolbar">
               <div className="toolbar-title">
-                <strong>{TERM[term].name}</strong>
-                <span>{TERM[term].weeks} · {TERM_COMPONENTS[term].join(' · ')}</span>
+                <strong>{finalOnly ? 'Final grade' : TERM[term].name}</strong>
+                <span>{finalOnly ? 'Final only · no midterm' : TERM[term].weeks} · {TERM_COMPONENTS[term].join(' · ')}</span>
               </div>
               <div className="toolbar-right">
                 <span className="input-icon">
@@ -282,7 +287,7 @@ export default function SectionRecord() {
             </div>
             <div className="toolbar-meta table-meta">
               <span>{rows.length} students · {plural(items.filter((it) => !it.virtual).length, 'item')}</span>
-              {term === 'POST' && <span>Final grade = CP &amp; EA of both terms + MPT + CPT + bonus</span>}
+              {term === 'POST' && <span>{finalOnly ? 'Final grade = CP + EA + CPT + bonus' : 'Final grade = CP & EA of both terms + MPT + CPT + bonus'}</span>}
               <span className="hide-sm"><kbd>Enter</kbd> / <kbd>↑</kbd><kbd>↓</kbd> to move</span>
             </div>
 
@@ -307,7 +312,7 @@ export default function SectionRecord() {
                       </th>
                     ))}
                     {term === 'POST' && <th rowSpan={3} className="grp grp-BONUS">Bonus</th>}
-                    {term === 'POST' && <th rowSpan={3} className="grp grp-REF">Midterm</th>}
+                    {term === 'POST' && !finalOnly && <th rowSpan={3} className="grp grp-REF">Midterm</th>}
                     <th rowSpan={3} className="grp grp-GRADE">{TERM[term].gradeLabel}</th>
                     <th rowSpan={3} className="gstart"></th>
                   </tr>
@@ -368,7 +373,7 @@ export default function SectionRecord() {
                           <ScoreCell row={ri} col={items.length} bonus value={r.bonus || undefined} onSave={(v) => saveScore(r.student.id, 'bonus', v)} />
                         </td>
                       )}
-                      {term === 'POST' && (
+                      {term === 'POST' && !finalOnly && (
                         <td className="gstart ref-col">
                           <span className="grade-cell"><span className="num">{fmt(r.grades.midterm.percent)}</span><EqBadge eq={r.grades.midterm.equivalent} /></span>
                         </td>
@@ -409,7 +414,7 @@ export default function SectionRecord() {
         />
       )}
       {panel === 'weights' && (
-        <Weights weights={section.weights} scale={section.gradeScale} onClose={closePanel} onSave={(body) => patchSection(body).then(closePanel)} />
+        <Weights weights={section.weights} scale={section.gradeScale} finalOnly={finalOnly} onClose={closePanel} onSave={(body) => patchSection(body).then(closePanel)} />
       )}
       {panel === 'details' && (
         <EditSectionModal
@@ -629,8 +634,13 @@ const DEFAULT_SCALE_ROWS = [
 const MAX_SCALE_ROWS = 7; // the class record's equivalence table has 7 rows plus R
 const sameScale = (a, b) => a.length === b.length && a.every((r, i) => Number(r.from) === b[i].from && r.eq.trim() === b[i].eq);
 
-function Weights({ weights, scale, onSave, onClose }) {
-  const [w, setW] = useState(structuredClone(weights));
+function Weights({ weights, scale, finalOnly, onSave, onClose }) {
+  // A final-only section has no midterm grade and no MPT.
+  const [w, setW] = useState(() => {
+    const c = structuredClone(weights);
+    if (finalOnly) c.final.MPT = 0;
+    return c;
+  });
   // Stored thresholds are half a point below the printed start (95.5 -> "96").
   const [rows, setRows] = useState(() => (scale?.length ? scale : []).map((r) => ({ from: Math.ceil(r.min), eq: r.eq })));
   const [busy, setBusy] = useState(false);
@@ -682,19 +692,19 @@ function Weights({ weights, scale, onSave, onClose }) {
       }
     >
       <div className="weights-grid">
-        {['midterm', 'final'].map((p) => {
+        {(finalOnly ? ['final'] : ['midterm', 'final']).map((p) => {
           const t = total(p);
           return (
             <div key={p} className="weight-block">
               <div className="weight-block-head">
-                <strong>{p === 'midterm' ? 'Midterm Grade' : 'Final Grade'}</strong>
+                <strong>{p === 'midterm' ? 'Midterm Grade' : finalOnly ? 'Final Grade (final only)' : 'Final Grade'}</strong>
                 <span className={`weight-total ${t === 100 ? 'ok' : 'bad'}`}>{t}%</span>
               </div>
               <div className="weight-inputs">
                 {['CP', 'EA', 'MPT', 'CPT'].map((k) => (
                   <label key={k} className={`weight-input grp-${k}`}>
                     <span>{k}</span>
-                    {p === 'midterm' && k === 'CPT' ? (
+                    {(p === 'midterm' && k === 'CPT') || (finalOnly && k === 'MPT') ? (
                       <div className="na">—</div>
                     ) : (
                       <div className="pct">

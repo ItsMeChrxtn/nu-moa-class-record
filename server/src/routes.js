@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
 import { User, Student, Section, Enrollment, Notification, audit, notifyGrades } from './models.js';
-import { COMPONENTS, MARKS, attendanceItems, cleanScale, computeGrades, scaleOf } from './grading.js';
+import { COMPONENTS, DEFAULT_WEIGHTS, MARKS, attendanceItems, cleanScale, computeGrades, scaleOf } from './grading.js';
 import { saveCredentials } from './credentials.js';
 import { HHMM_RE as HHMM, blocksOutside, cleanBlocks, cleanSchedule, legacyFields, workHoursOf } from './schedule.js';
 import { mailConfigured, sendStudentCredentials } from './mailer.js';
@@ -199,7 +199,7 @@ faculty.get(
           // MPT counts as Midterms, CPT as Finals; CP/EA by their period.
           finalsItemCount: s.items.filter((i) => i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST')).length,
           // Class averages for the dashboard cards (null until the section has students and items).
-          midtermAverage: s.items.length ? avg(grades.map((g) => g.midterm.percent)) : null,
+          midtermAverage: s.items.length && s.gradingMode !== 'final' ? avg(grades.map((g) => g.midterm.percent)) : null,
           finalAverage: s.items.length ? avg(grades.map((g) => g.final.percent)) : null,
         };
       }),
@@ -228,6 +228,10 @@ faculty.patch(
       const { data, error } = sectionFields(details, true);
       if (error) return res.status(400).json({ error });
       if (data.code === '') return res.status(400).json({ error: 'Section code is required.' });
+      if (data.gradingMode === 'final' && req.section.gradingMode !== 'final') {
+        const err = toFinalOnly(req.section);
+        if (err) return res.status(400).json({ error: err });
+      }
       Object.assign(req.section, data);
       audit(req.user, 'section.update', sectionLabel(req.section), Object.keys(data).filter((k) => !['day', 'time', 'room'].includes(k)).join(', '));
     }
@@ -266,8 +270,10 @@ faculty.post(
     const { component, period, label, max } = req.body || {};
     if (!COMPONENTS.includes(component)) return res.status(400).json({ error: 'Invalid component' });
     if (!label || !(Number(max) > 0)) return res.status(400).json({ error: 'A label and a max score are required.' });
-    // Midterms: CP, EA, MPT. Finals: CP, EA, CPT.
-    const term = component === 'MPT' ? 'MID' : component === 'CPT' ? 'POST' : period === 'POST' ? 'POST' : 'MID';
+    // Midterms: CP, EA, MPT. Finals: CP, EA, CPT. A final-only section has finals items only.
+    const finalOnly = req.section.gradingMode === 'final';
+    if (finalOnly && component === 'MPT') return res.status(400).json({ error: 'A final-only section has no Midterm Performance Task.' });
+    const term = finalOnly || component === 'CPT' ? 'POST' : component === 'MPT' ? 'MID' : period === 'POST' ? 'POST' : 'MID';
     req.section.items.push({ component, period: term, label, max: Number(max) });
     await req.section.save();
     await notifyGrades(req.section); // e.g. the first finals item of a published section
@@ -351,6 +357,19 @@ const STUDENT_NO = /^\d{4}-\d{4,7}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 // Section details from a form. partial: only the fields present are returned (for edits).
+// Turning a section into "final only": its CP/EA midterm items become finals items, and the MPT share
+// of the final grade moves to the CPT so the percentages still add up to 100. Refused while it has an
+// MPT item (a midterm task), so no scores are silently dropped. Returns an error message or null.
+function toFinalOnly(section) {
+  if (section.items.some((i) => i.component === 'MPT'))
+    return 'This section has a Midterm Performance Task. Delete it first, then switch to final only.';
+  for (const i of section.items) if (i.component === 'CP' || i.component === 'EA') i.period = 'POST';
+  const f = section.weights?.final || DEFAULT_WEIGHTS.final;
+  section.set('weights.final.CPT', (Number(f.CPT) || 0) + (Number(f.MPT) || 0));
+  section.set('weights.final.MPT', 0);
+  return null;
+}
+
 function sectionFields(b, partial) {
   const data = {};
   const has = (k) => !partial || b[k] !== undefined;
@@ -360,6 +379,10 @@ function sectionFields(b, partial) {
   if (has('units')) data.units = Number(b.units) || undefined;
   if (has('term')) data.term = str(b.term, 30);
   if (has('academicYear')) data.academicYear = str(b.academicYear, 20);
+  if (b.gradingMode !== undefined) {
+    if (!['both', 'final'].includes(b.gradingMode)) return { error: 'Choose "Midterm and final" or "Final only".' };
+    data.gradingMode = b.gradingMode;
+  }
   if (b.schedule !== undefined) {
     const { rows, error } = cleanSchedule(b.schedule);
     if (error) return { error };
@@ -379,6 +402,8 @@ faculty.post(
     const { data, error } = sectionFields(b, false);
     if (error) return res.status(400).json({ error });
     data.faculty = req.user._id;
+    // A final-only subject starts with CP 30 / EA 30 / CPT 40 for its final grade.
+    if (data.gradingMode === 'final') data.weights = { midterm: DEFAULT_WEIGHTS.midterm, final: { CP: 30, EA: 30, MPT: 0, CPT: 40 } };
     if (!data.code) return res.status(400).json({ error: 'Section code is required.' });
     if (b.copyFrom && mongoose.isValidObjectId(b.copyFrom)) {
       const src = await Section.findOne({ _id: b.copyFrom, faculty: req.user._id });
@@ -387,7 +412,14 @@ faculty.post(
         data.weights = o.weights;
         data.gradeScale = o.gradeScale || [];
         data.items = o.items.map(({ component, period, label, max }) => ({ component, period, label, max }));
+        if (b.gradingMode === undefined) data.gradingMode = o.gradingMode || 'both';
       }
+    }
+    // Copied from a midterm-and-final section into a final-only one: keep finals-type items only.
+    if (data.gradingMode === 'final' && data.items) {
+      data.items = data.items.filter((i) => i.component !== 'MPT').map((i) => ({ ...i, period: 'POST' }));
+      const f = data.weights?.final || DEFAULT_WEIGHTS.final;
+      data.weights = { midterm: data.weights?.midterm || DEFAULT_WEIGHTS.midterm, final: { CP: f.CP || 0, EA: f.EA || 0, MPT: 0, CPT: (f.CPT || 0) + (f.MPT || 0) } };
     }
     try {
       const section = await Section.create(data);
@@ -773,6 +805,7 @@ function sectionSummary(s) {
     units: s.units,
     term: s.term,
     academicYear: s.academicYear,
+    gradingMode: s.gradingMode || 'both',
   };
 }
 

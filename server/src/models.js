@@ -104,6 +104,8 @@ const sectionSchema = new Schema(
       ],
     },
     published: { type: Boolean, default: false },
+    // 'both': midterm and final grades; 'final': the subject has a final grade only (no midterm).
+    gradingMode: { type: String, enum: ['both', 'final'], default: 'both' },
   },
   { timestamps: true }
 );
@@ -152,7 +154,8 @@ export async function notifyGrades(section) {
   const items = section.items || [];
   const finals = items.some((i) => i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST'));
   const midterm = items.some((i) => !(i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST')));
-  const kinds = [midterm && 'midterm', finals && 'final'].filter(Boolean);
+  const finalOnly = section.gradingMode === 'final';
+  const kinds = finalOnly ? [items.length && 'final'].filter(Boolean) : [midterm && 'midterm', finals && 'final'].filter(Boolean);
   if (!kinds.length) return 0;
   const enrollments = await Enrollment.find({ section: section._id }, 'student');
   const docs = enrollments.flatMap((e) => kinds.map((kind) => ({ student: e.student, section: section._id, kind })));

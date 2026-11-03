@@ -140,10 +140,16 @@ function SectionCard({ s, color, onDelete }) {
           </div>
         ))}
       </div>
-      <div className="term-progress">
-        <TermMeter label="Midterms" items={s.itemCount - (s.finalsItemCount || 0)} average={s.midtermAverage} state={s.finalsItemCount ? 'done' : 'now'} />
-        <TermMeter label="Finals" items={s.finalsItemCount || 0} average={s.finalsItemCount ? s.finalAverage : null} state={s.finalsItemCount ? 'now' : 'later'} />
-      </div>
+      {s.gradingMode === 'final' ? (
+        <div className="term-progress single">
+          <TermMeter label="Final only" items={s.itemCount} average={s.itemCount ? s.finalAverage : null} state="now" />
+        </div>
+      ) : (
+        <div className="term-progress">
+          <TermMeter label="Midterms" items={s.itemCount - (s.finalsItemCount || 0)} average={s.midtermAverage} state={s.finalsItemCount ? 'done' : 'now'} />
+          <TermMeter label="Finals" items={s.finalsItemCount || 0} average={s.finalsItemCount ? s.finalAverage : null} state={s.finalsItemCount ? 'now' : 'later'} />
+        </div>
+      )}
       <div className="section-foot">
         <div className="foot-stats">
           <span className="foot-stat"><Icon name="users" size={15} /><strong>{s.studentCount}</strong> students</span>
@@ -203,7 +209,7 @@ export default function FacultyHome() {
   const students = sections.reduce((s, x) => s + x.studentCount, 0);
   const published = sections.filter((s) => s.published).length;
   // Average of this term's section averages (midterm grade until finals start).
-  const current = (latest?.sections || []).map((s) => (s.finalsItemCount ? s.finalAverage : s.midtermAverage)).filter((v) => v != null);
+  const current = (latest?.sections || []).map((s) => (s.finalsItemCount || s.gradingMode === 'final' ? s.finalAverage : s.midtermAverage)).filter((v) => v != null);
   const termAverage = current.length ? current.reduce((a, b) => a + b, 0) / current.length : null;
   const colors = sectionColors(sections);
 

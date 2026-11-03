@@ -67,6 +67,28 @@ export function ScheduleEditor({ rows, onChange, highlighted }) {
 // Rows the server will accept: complete ones only (blank rows are dropped).
 export const filledRows = (rows) => rows.filter((r) => r.day || r.start || r.end || r.room);
 
+// Midterm and final grades, or a final grade only (for subjects without a midterm).
+export function GradingModeChoice({ value, onChange }) {
+  const options = [
+    ['both', 'Midterm and final', 'Midterm grade (CP, EA, MPT) and final grade'],
+    ['final', 'Final only', 'No midterm: one final grade from CP, EA and CPT'],
+  ];
+  return (
+    <div className="field">
+      <span className="field-label">Grading</span>
+      <div className="mode-choice" role="radiogroup" aria-label="Grading">
+        {options.map(([k, title, sub]) => (
+          <label key={k} className={`mode-option ${value === k ? 'active' : ''}`}>
+            <input type="radio" name="gradingMode" value={k} checked={value === k} onChange={() => onChange(k)} />
+            <strong>{title}</strong>
+            <small>{sub}</small>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Edit an existing section's details and schedule.
 export function EditSectionModal({ section, onClose, onSaved }) {
   const [form, setForm] = useState({
@@ -76,6 +98,7 @@ export function EditSectionModal({ section, onClose, onSaved }) {
     units: section.units ?? '',
     term: section.term || '',
     academicYear: section.academicYear || '',
+    gradingMode: section.gradingMode || 'both',
   });
   const [rows, setRows] = useState(() => {
     if (section.schedule?.length) return section.schedule.map((r) => ({ ...r }));
@@ -142,6 +165,10 @@ export function EditSectionModal({ section, onClose, onSaved }) {
             <input value={form.academicYear} onChange={set('academicYear')} placeholder="2026-2027" />
           </label>
         </div>
+        <GradingModeChoice value={form.gradingMode} onChange={(v) => setForm({ ...form, gradingMode: v })} />
+        {form.gradingMode === 'final' && section.gradingMode !== 'final' && (
+          <div className="alert info"><Icon name="info" />Midterm CP and EA items move to Finals, and the MPT share of the final grade moves to the CPT.</div>
+        )}
         <div className="field">
           <span className="field-label">Schedule</span>
           <ScheduleEditor rows={rows} onChange={setRows} />

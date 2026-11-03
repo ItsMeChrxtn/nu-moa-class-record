@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { api, rowsFromText } from './api.js';
-import { ScheduleEditor, blankRow, filledRows } from './SectionForm.jsx';
+import { GradingModeChoice, ScheduleEditor, blankRow, filledRows } from './SectionForm.jsx';
 import { EMAIL, isStudentNo } from './studentParser.js';
 import { Avatar, Icon, Modal } from './ui.jsx';
 
@@ -163,7 +163,7 @@ export async function deleteSection(section, { confirm, toast }, counts = {}) {
   }
 }
 
-const blank = { code: '', subjectCode: '', subjectTitle: '', units: '3', term: '', academicYear: '', copyFrom: '' };
+const blank = { code: '', subjectCode: '', subjectTitle: '', units: '3', term: '', academicYear: '', copyFrom: '', gradingMode: 'both' };
 
 // preset: { academicYear, term } when opened from an academic-year group; those stay fixed
 // (a PDF won't overwrite them), so the new section lands in that group.
@@ -208,6 +208,7 @@ export function NewSectionModal({ sections, onClose, onCreated, preset }) {
         subjectCode: f.subjectCode || src.subjectCode || '',
         subjectTitle: f.subjectTitle || src.subjectTitle || '',
         units: f.units || String(src.units ?? ''),
+        gradingMode: src.gradingMode || f.gradingMode,
       }),
     }));
   }
@@ -304,6 +305,7 @@ export function NewSectionModal({ sections, onClose, onCreated, preset }) {
               <input className={auto('academicYear')} value={form.academicYear} onChange={set('academicYear')} placeholder="2026-2027" />
             </label>
           </div>
+          <GradingModeChoice value={form.gradingMode} onChange={(v) => setForm((f) => ({ ...f, gradingMode: v }))} />
           <label className="field">
             <span>Copy items and percentages from <span className="hint">(optional)</span></span>
             <select value={form.copyFrom} onChange={pickTemplate}>

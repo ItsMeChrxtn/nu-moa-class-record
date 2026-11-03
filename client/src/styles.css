@@ -1513,3 +1513,15 @@ button.mark:active { transform: scale(0.92); }
 .swal-backdrop.is-loading { background: #0f172a59; backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
 .page-loader .px-loader { box-shadow: var(--hard-lg); }
 .px-foot span:first-child { color: var(--ink-2); }
+
+/* Section form: grading type */
+.mode-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mode-option { position: relative; display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); cursor: pointer; transition: border-color 0.12s, box-shadow 0.12s; }
+.mode-option input { position: absolute; opacity: 0; pointer-events: none; }
+.mode-option strong { font-size: 0.88rem; }
+.mode-option small { font-size: 0.74rem; color: var(--ink-3); line-height: 1.35; }
+.mode-option:hover { border-color: var(--ink); }
+.mode-option.active { border: 1.5px solid var(--ink); box-shadow: 3px 3px 0 var(--blue); }
+.mode-option:has(input:focus-visible) { box-shadow: var(--focus); }
+.term-progress.single { grid-template-columns: 1fr; }
+@media (max-width: 520px) { .mode-choice { grid-template-columns: 1fr; } }

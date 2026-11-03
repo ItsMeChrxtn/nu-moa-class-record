@@ -115,6 +115,18 @@ export function computeGrades(section, enrollment) {
 
   const passFail = /the nationalian/i.test(section.subjectTitle || '');
   const scale = scaleOf(section);
+  // A final-only subject has no midterm grade (and no MPT in its final grade).
+  if (section.gradingMode === 'final') {
+    const finalOnly =
+      fraction(pick('CP'), scores) * (w.final.CP || 0) +
+      fraction(pick('EA'), scores) * (w.final.EA || 0) +
+      fraction(pick('CPT'), scores) * (w.final.CPT || 0) +
+      (enrollment.bonus || 0);
+    return {
+      midterm: { percent: null, equivalent: null },
+      final: { percent: round2(finalOnly), equivalent: equivalent(finalOnly, passFail, scale) },
+    };
+  }
   return {
     midterm: { percent: round2(midterm), equivalent: equivalent(midterm, passFail, scale) },
     final: { percent: round2(final), equivalent: equivalent(final, passFail, scale) },

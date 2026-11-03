@@ -73,10 +73,12 @@ export default function StudentRecords() {
 // One class: banner (class + both grades), then the chosen term's scores beside its summary.
 function Report({ record, user }) {
   const { section, grades, items } = record;
-  // Finals shows up once the faculty has added finals items.
-  const finalsOpen = items.some((i) => termOf(i) === 'POST');
+  // A final-only subject has a final grade and nothing else; otherwise finals show up once the
+  // faculty has added finals items.
+  const finalOnly = section.gradingMode === 'final';
+  const finalsOpen = finalOnly ? items.length > 0 : items.some((i) => termOf(i) === 'POST');
   const [view, setView] = useState(finalsOpen ? 'POST' : 'MID');
-  const term = finalsOpen ? view : 'MID';
+  const term = finalOnly ? 'POST' : finalsOpen ? view : 'MID';
   const sched = schedule(section).map((x) => [x.day, x.time, x.room && `Rm ${x.room}`].filter(Boolean).join(' · ')).filter(Boolean);
 
   return (
@@ -101,20 +103,20 @@ function Report({ record, user }) {
           </dl>
         </div>
         <div className="sr-grades">
-          <GradeTile label="Midterm grade" grade={grades.midterm} active={term === 'MID'} onClick={() => setView('MID')} />
+          {!finalOnly && <GradeTile label="Midterm grade" grade={grades.midterm} active={term === 'MID'} onClick={() => setView('MID')} />}
           {finalsOpen ? (
             <GradeTile label="Final grade" grade={grades.final} active={term === 'POST'} onClick={() => setView('POST')} />
           ) : (
             <div className="grade-tile pending">
               <span className="grade-tile-label">Final grade</span>
               <Icon name="lock" size={22} />
-              <span className="pending-text">After midterms</span>
+              <span className="pending-text">{finalOnly ? 'No items yet' : 'After midterms'}</span>
             </div>
           )}
         </div>
       </section>
 
-      <div className="term-tabs" role="tablist">
+      {!finalOnly && <div className="term-tabs" role="tablist">
         <button role="tab" aria-selected={term === 'MID'} onClick={() => setView('MID')}>
           Midterms <small>{fmtPct(grades.midterm.percent)}</small>
         </button>
@@ -125,7 +127,7 @@ function Report({ record, user }) {
         ) : (
           <span className="tab-hint"><Icon name="lock" size={14} /> Finals opens once your faculty adds finals items</span>
         )}
-      </div>
+      </div>}
 
       <div className="sr-layout">
         <Scores key={term} record={record} term={term} />
@@ -154,15 +156,16 @@ function Scores({ record, term }) {
   const { items, scores, section } = record;
   const t = TERMS[term];
   const w = section.weights?.[t.weights] || {};
-  const groups = t.parts.map((key) => ({ key, items: items.filter((i) => i.component === key && termOf(i) === term), weight: w[key] }));
+  const finalOnly = section.gradingMode === 'final';
+  const groups = t.parts.map((key) => ({ key, items: items.filter((i) => i.component === key && (finalOnly || termOf(i) === term)), weight: w[key] }));
   const grade = term === 'MID' ? record.grades.midterm : record.grades.final;
 
   return (
     <section className="sr-card sr-scores">
       <div className="sr-card-head">
         <div>
-          <h3>{t.name}</h3>
-          <span className="sr-sub">{t.weeks} · {t.parts.join(' · ')}</span>
+          <h3>{finalOnly ? 'Final grade' : t.name}</h3>
+          <span className="sr-sub">{finalOnly ? 'Final only · no midterm' : t.weeks} · {t.parts.join(' · ')}</span>
         </div>
         <span className="term-grade">
           <strong>{fmtPct(grade.percent)}</strong>
@@ -273,7 +276,7 @@ function Certificates({ record, user, finalsOpen }) {
   return (
     <section className="sr-card sr-certs">
       <h4 className="sr-side-title"><Icon name="award" size={16} /> Certificates</h4>
-      {row('MID', 'Midterm grade certificate', midOpen, record.grades.midterm)}
+      {record.section.gradingMode !== 'final' && row('MID', 'Midterm grade certificate', midOpen, record.grades.midterm)}
       {row('POST', 'Final grade certificate', finalsOpen, record.grades.final)}
     </section>
   );

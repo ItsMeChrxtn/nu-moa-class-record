@@ -111,13 +111,14 @@ export async function downloadFile(url) {
 export function gradeBreakdown(record, term) {
   const { items, scores, section, bonus } = record;
   const w = (term === 'MID' ? section.weights?.midterm : section.weights?.final) || {};
-  const keys = term === 'MID' ? ['CP', 'EA', 'MPT'] : ['CP', 'EA', 'MPT', 'CPT'];
+  const finalOnly = section.gradingMode === 'final';
+  const keys = term === 'MID' ? ['CP', 'EA', 'MPT'] : finalOnly ? ['CP', 'EA', 'CPT'] : ['CP', 'EA', 'MPT', 'CPT'];
   const rows = keys.map((c) => {
     const list = items.filter((i) => i.component === c && (term === 'POST' || termOf(i) === 'MID'));
     const got = list.reduce((s, i) => s + (scores[i.id] ?? 0), 0);
     const max = list.reduce((s, i) => s + i.max, 0);
     const weight = Number(w[c]) || 0;
-    return { key: c, got, max, weight, points: max ? (got / max) * weight : 0, bothTerms: term === 'POST' && (c === 'CP' || c === 'EA') };
+    return { key: c, got, max, weight, points: max ? (got / max) * weight : 0, bothTerms: term === 'POST' && !finalOnly && (c === 'CP' || c === 'EA') };
   });
   if (term === 'POST' && bonus) rows.push({ key: 'BONUS', points: bonus });
   return rows;
