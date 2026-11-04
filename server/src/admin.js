@@ -240,6 +240,7 @@ admin.post(
     const pw = tempPassword();
     user.passwordHash = await hashPassword(pw);
     user.mustChangePassword = true;
+    user.accountBy = req.user._id;
     await user.save();
     audit(req.user, 'student.reset-password', `${user.name} (${user.username})`);
     res.json({ username: user.username, tempPassword: pw });

@@ -125,7 +125,7 @@ export default function SectionRecord() {
   async function resetPassword(student) {
     const ok = await confirm({
       title: 'Reset password?',
-      message: `A new temporary password will be created for ${titleCase(student.name)}. Their current password will stop working.`,
+      message: `A new temporary password will be created for ${titleCase(student.name)}. This is their one account for all their classes, so their current password stops working everywhere.`,
       confirmLabel: 'Reset',
     });
     if (!ok) return;

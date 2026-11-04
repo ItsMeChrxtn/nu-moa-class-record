@@ -420,6 +420,7 @@ faculty.post(
     user.passwordHash = await hashPassword(pw);
     user.mustChangePassword = true;
     user.credentialsSentAt = undefined;
+    user.accountBy = req.user._id;
     await user.save();
     // Email it when we can; the password is shown on screen either way.
     const student = await Student.findById(req.params.studentId);
@@ -567,6 +568,21 @@ function accountStatus(user) {
   return user.credentialsSentAt ? 'sent' : 'temp';
 }
 
+// A student has one account for all their classes. A temporary password nobody has used yet may
+// already be in the student's hands, so only whoever issued it can replace it in bulk. Returns the
+// ids of students whose temporary password came from someone else. Accounts from before this was
+// recorded count as someone else's when another faculty also teaches the student.
+async function sharedAccounts(users, me) {
+  const pending = users.filter((u) => u.mustChangePassword);
+  const shared = new Set(pending.filter((u) => u.accountBy && String(u.accountBy) !== String(me._id)).map((u) => String(u.student)));
+  const unknown = pending.filter((u) => !u.accountBy).map((u) => u.student);
+  if (unknown.length) {
+    const enrollments = await Enrollment.find({ student: { $in: unknown } }).populate('section', 'faculty');
+    for (const e of enrollments) if (e.section && String(e.section.faculty) !== String(me._id)) shared.add(String(e.student));
+  }
+  return shared;
+}
+
 faculty.get(
   '/sections/:id/accounts',
   ownSection,
@@ -575,11 +591,13 @@ faculty.get(
     const ids = enrollments.map((e) => e.student?._id).filter(Boolean);
     const users = await User.find({ student: { $in: ids }, role: 'student' });
     const byStudent = Object.fromEntries(users.map((u) => [String(u.student), u]));
+    const shared = await sharedAccounts(users, req.user);
     const students = enrollments
       .filter((e) => e.student)
       .map((e) => {
         const u = byStudent[String(e.student._id)];
         return {
+          shared: shared.has(String(e.student._id)),
           id: e.student._id,
           studentNo: e.student.studentNo,
           name: e.student.name,
@@ -594,7 +612,8 @@ faculty.get(
   })
 );
 
-// Create accounts and email temporary passwords. Never touches a student who already set their own password.
+// Create accounts and email temporary passwords. Never touches a student who already set their own
+// password, or a temporary password another faculty issued (see sharedAccounts).
 // Body: { resend: bool (also students already emailed), includeNoEmail: bool (create, show passwords here) }
 faculty.post(
   '/sections/:id/accounts/send',
@@ -602,9 +621,10 @@ faculty.post(
   wrap(async (req, res) => {
     const { resend = false, includeNoEmail = false } = req.body || {};
     const enrollments = await Enrollment.find({ section: req.section._id }).populate('student');
-    const result = { sent: 0, failed: [], shown: [], skippedActive: 0, skippedSent: 0, skippedNoEmail: 0 };
+    const result = { sent: 0, failed: [], shown: [], skippedActive: 0, skippedShared: 0, skippedSent: 0, skippedNoEmail: 0 };
     const hasMail = mailConfigured();
     const queue = [];
+    const shared = await sharedAccounts(await User.find({ student: { $in: enrollments.map((e) => e.student?._id).filter(Boolean) }, role: 'student' }), req.user);
 
     for (const e of enrollments) {
       const s = e.student;
@@ -612,6 +632,7 @@ faculty.post(
       let user = await User.findOne({ student: s._id, role: 'student' });
       const status = accountStatus(user);
       if (status === 'active') { result.skippedActive++; continue; }
+      if (shared.has(String(s._id))) { result.skippedShared++; continue; }
       if (status === 'sent' && !resend) { result.skippedSent++; continue; }
       const canEmail = hasMail && EMAIL.test(s.email || '');
       if (!canEmail && !includeNoEmail) { result.skippedNoEmail++; continue; }
@@ -625,7 +646,15 @@ faculty.post(
       user.passwordHash = await hashPassword(pw);
       user.mustChangePassword = true;
       user.credentialsSentAt = undefined;
-      await user.save();
+      user.accountBy = req.user._id;
+      try {
+        await user.save();
+      } catch (err) {
+        // Another faculty created this account at the same moment: theirs stands.
+        if (err.code !== 11000) throw err;
+        result.skippedShared++;
+        continue;
+      }
       queue.push({ user, student: s, pw, canEmail });
     }
 

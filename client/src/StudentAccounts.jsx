@@ -34,9 +34,10 @@ export function StudentAccountsModal({ section, onClose, onDone }) {
   // Same rules as the server, so the button says exactly how many will be sent.
   const plan = useMemo(() => {
     if (!data) return null;
-    const p = { email: 0, show: 0, active: 0, sent: 0, noEmail: 0 };
+    const p = { email: 0, show: 0, active: 0, shared: 0, sent: 0, noEmail: 0 };
     for (const s of data.students) {
       if (s.status === 'active') p.active++;
+      else if (s.shared) p.shared++;
       else if (s.status === 'sent' && !resend) p.sent++;
       else if (data.mailConfigured && s.email) p.email++;
       else if (includeNoEmail) p.show++;
@@ -83,17 +84,18 @@ export function StudentAccountsModal({ section, onClose, onDone }) {
         <div className="result-stats">
           <div><strong>{result.sent}</strong><span>emailed</span></div>
           <div><strong>{handOut.length}</strong><span>to hand out</span></div>
-          <div><strong>{result.skippedActive + result.skippedSent + result.skippedNoEmail}</strong><span>skipped</span></div>
+          <div><strong>{result.skippedActive + result.skippedShared + result.skippedSent + result.skippedNoEmail}</strong><span>skipped</span></div>
         </div>
         {result.sent > 0 && (
           <div className="alert ok"><Icon name="check" />{result.sent} student{result.sent === 1 ? '' : 's'} got their student number and temporary password by email.</div>
         )}
-        {(result.skippedActive > 0 || result.skippedSent > 0 || result.skippedNoEmail > 0) && (
+        {(result.skippedActive > 0 || result.skippedShared > 0 || result.skippedSent > 0 || result.skippedNoEmail > 0) && (
           <div className="alert info">
             <Icon name="info" />
             <span>
               Skipped: {[
                 result.skippedActive && `${result.skippedActive} already signed in`,
+                result.skippedShared && `${result.skippedShared} with an account from another class (password not changed)`,
                 result.skippedSent && `${result.skippedSent} already emailed`,
                 result.skippedNoEmail && `${result.skippedNoEmail} without email`,
               ].filter(Boolean).join(', ')}.
@@ -171,6 +173,15 @@ export function StudentAccountsModal({ section, onClose, onDone }) {
             </span>
           </div>
 
+          {plan.shared > 0 && (
+            <div className="alert info">
+              <Icon name="info" />
+              <span>
+                <strong>{plan.shared} student{plan.shared === 1 ? ' already has' : 's already have'} an account from another class.</strong> They keep the same sign-in and their password is not changed. This section appears on their account once you show its grades.
+              </span>
+            </div>
+          )}
+
           <div className="acct-list">
             {data.students.map((s) => (
               <div key={s.id} className="acct-row">
@@ -179,7 +190,7 @@ export function StudentAccountsModal({ section, onClose, onDone }) {
                   <strong>{s.name}</strong>
                   <span>{s.studentNo} · {s.email || <em className="no-mail">no email</em>}</span>
                 </div>
-                <span className={`acct-chip acct-${s.status}`}><i />{ACCOUNT_LABEL[s.status]}</span>
+                <span className={`acct-chip acct-${s.status}`}><i />{s.shared ? 'From another class' : ACCOUNT_LABEL[s.status]}</span>
               </div>
             ))}
           </div>
@@ -188,7 +199,7 @@ export function StudentAccountsModal({ section, onClose, onDone }) {
             <input type="checkbox" checked={resend} onChange={(e) => setResend(e.target.checked)} />
             <span>
               <strong>Resend to students already emailed</strong>
-              <small>They get a new temporary password. Students who already signed in are never changed.</small>
+              <small>They get a new temporary password. Students who already signed in, or got their account from another class, are never changed.</small>
             </span>
           </label>
           <label className="check">
