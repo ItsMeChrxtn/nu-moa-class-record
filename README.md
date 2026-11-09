@@ -121,7 +121,7 @@ Verified against the Excel file: Midterm/Final % and equivalents match for all 1
 ## Deploy (GitHub → Render + Vercel)
 
 - **API → Render** (`render.yaml`): Render → New → Blueprint → this repository. Set `MONGODB_URI` (MongoDB Atlas; Render cannot reach a local MongoDB), `BREVO_API_KEY`, `MAIL_FROM_EMAIL` and `APP_URL` (the Vercel address). `JWT_SECRET` is generated. Health check: `/api/health`.
-- **Website → Vercel** (`client/`): import the repository with **Root Directory = `client`**. `client/vercel.json` builds with Vite and forwards `/api/*` to `https://nu-moa-class-record-api.onrender.com`, so sign-in cookies stay on the Vercel domain. If the Render service gets a different address, update that URL.
+- **Website → Vercel** (`client/`): import the repository with **Root Directory = `client`**. `client/vercel.json` builds with Vite and forwards `/api/*` to `https://nu-moa-class-record-api-1fpl.onrender.com`, so sign-in cookies stay on the Vercel domain. If the Render service gets a different address, update that URL.
 - **Brevo:** Render's outgoing IP addresses change, so in Brevo → Security → Authorised IPs either deactivate blocking for API keys or add Render's outbound IPs (Render → service → Connect → Outbound).
 - Create the first admin on the server with `npm run create-admin -- admin "Full Name"` (Render → Shell), or copy the local database to Atlas.
 
