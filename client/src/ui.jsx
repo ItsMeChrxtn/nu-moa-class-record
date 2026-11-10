@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { activity } from './api.js';
-import { PixelLoader, ProgressOverlay, SwalCard, SweetAlert } from './Feedback.jsx';
+import { Notes, PixelLoader, ProgressOverlay, SwalCard } from './Feedback.jsx';
 
 const paths = {
   logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
@@ -279,9 +279,9 @@ export function Ring({ percent, eq, label, size = 190, stroke = 14, mini = false
   );
 }
 
-export function Hero({ eyebrow, title, lead, back, actions, children }) {
+export function Hero({ eyebrow, title, lead, back, actions, children, compact }) {
   return (
-    <section className="hero">
+    <section className={`hero ${compact ? 'hero-compact' : ''}`}>
       <div className="hero-glow" aria-hidden="true" />
       <div className="hero-inner">
         <div className="hero-text">
@@ -400,27 +400,21 @@ export function Modal({ title, subtitle, icon, tone = 'brand', onClose, children
 
 const UIContext = createContext(null);
 
-const MIN_RUN = 600; // ms the loading popup stays at least, so it never just flickers
-const DONE_PAUSE = 250; // ms showing 100% before the result popup
-const ALERT_MS = 2200; // a success popup closes itself after this
+const MIN_RUN = 400; // ms the progress line stays at least, so it never just flickers
+const DONE_PAUSE = 200; // ms showing 100% before it fades
+const ALERT_MS = { success: 2600, info: 4500, error: 7000 }; // how long a notification stays
 
 export function UIProvider({ children }) {
-  const [alerts, setAlerts] = useState([]); // sweet-alert popups, shown one at a time
+  const [alerts, setAlerts] = useState([]); // corner notifications
   const [dialog, setDialog] = useState(null);
   const [progress, setProgress] = useState(null); // { label, value, done }
   const run = useRef({ active: new Map(), shownAt: 0, failed: false, timer: null });
 
-  // toast(message, 'success' | 'error' | 'info', title?) shows a popup once any loading bar is finished.
+  // toast(message, 'success' | 'error' | 'info', title?) shows a notification in the corner.
   const toast = useCallback((message, type = 'success', title) => {
-    setAlerts((a) => [...a, { id: Math.random(), message, type, title, duration: ALERT_MS }]);
+    setAlerts((a) => [...a, { id: Math.random(), message, type, title, duration: ALERT_MS[type] || ALERT_MS.info }]);
   }, []);
-  const closeAlert = useCallback(() => setAlerts((a) => a.slice(1)), []);
-  const current = !progress && alerts[0];
-  useEffect(() => {
-    if (!current || current.type !== 'success') return;
-    const t = setTimeout(closeAlert, current.duration);
-    return () => clearTimeout(t);
-  }, [current, closeAlert]);
+  const closeAlert = useCallback((id) => setAlerts((a) => a.filter((x) => x.id !== id)), []);
 
   // Loading bar: follows every save / delete / download announced by api.js.
   useEffect(() => {
@@ -492,7 +486,7 @@ export function UIProvider({ children }) {
     <UIContext.Provider value={{ toast, confirm }}>
       {children}
       {progress && <ProgressOverlay progress={progress} />}
-      {current && <SweetAlert key={current.id} alert={current} onClose={closeAlert} />}
+      <Notes alerts={alerts} onClose={closeAlert} />
       {dialog && <ConfirmDialog dialog={dialog} close={close} />}
     </UIContext.Provider>
   );

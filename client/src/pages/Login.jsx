@@ -47,16 +47,18 @@ export default function Login() {
           Know your <span className="accent">grades.</span>
         </h1>
         <p className="hero-text">
-          Every quiz, activity and exam behind your midterm and final grade. Sign in with your student number to see it.
+          Every quiz, activity and exam behind your midterm and final grade. Log in with your email to see it.
         </p>
 
         <form className="auth-form" onSubmit={submit}>
           <label className="field">
-            <span>Student number / Email</span>
+            <span>Email</span>
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Your student number, e.g. 2023-150144"
+              type="text"
+              inputMode="email"
+              placeholder="Your email address"
               autoComplete="username"
               autoCapitalize="none"
               spellCheck={false}
@@ -83,10 +85,10 @@ export default function Login() {
           </label>
           {error && <div className="alert error"><Icon name="alert" />{error}</div>}
           <button className="btn primary block" disabled={busy || !username || !password}>
-            {busy ? <span className="spinner" style={{ borderColor: '#fff6', borderTopColor: '#fff' }} /> : 'Show my grades'}
+            {busy ? <span className="spinner" style={{ borderColor: '#fff6', borderTopColor: '#fff' }} /> : 'Log in'}
           </button>
           <p className="auth-note">
-            Faculty: sign in with your email. <Link to="/forgot-password">Forgot your password?</Link>
+            <Link to="/forgot-password">Forgot your password?</Link>
           </p>
         </form>
       </main>

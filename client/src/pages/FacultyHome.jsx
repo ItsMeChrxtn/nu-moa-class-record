@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, meetingsOn, schedule, todayCode } from '../api.js';
+import { api, meetingsOn, roomLabel, schedule, todayCode } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { NewSectionModal, deleteSection } from '../Roster.jsx';
 import Timetable, { LoadingReportModal, sectionColors } from '../Timetable.jsx';
@@ -78,7 +78,7 @@ function TodayPanel({ sections, colors, onOpenWeek }) {
                   <span className="today-time">{c.time || 'Time not set'}</span>
                   <span className="today-code">{c.s.code}</span>
                   <span className="today-subject">{titleCase(c.s.subjectTitle || c.s.subjectCode || '')}</span>
-                  <span className="today-room">{c.room ? `Rm ${c.room}` : ''}</span>
+                  <span className="today-room">{roomLabel(c.room)}</span>
                   <span className="today-tag">{live ? 'Now' : done ? 'Done' : i === nextIdx ? 'Next' : ''}</span>
                 </Link>
               </li>
@@ -136,7 +136,7 @@ function SectionCard({ s, color, onDelete }) {
             <Icon name="calendar" size={15} />
             <span className="sched-day">{x.day}</span>
             {x.time && <><Icon name="clock" size={15} /><span>{x.time}</span></>}
-            {x.room && <span className="sched-room">Rm {x.room}</span>}
+            {x.room && <span className="sched-room">{roomLabel(x.room)}</span>}
           </div>
         ))}
       </div>

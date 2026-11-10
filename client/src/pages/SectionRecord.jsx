@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { api, COMPONENTS, PERIODS, TERM_COMPONENTS, fmt, groupItems, schedule, sortItems, termOf } from '../api.js';
+import { api, COMPONENTS, PERIODS, TERM_COMPONENTS, fmt, groupItems, roomLabel, schedule, sortItems, termOf } from '../api.js';
 import { AddStudentsModal, ImportResultModal, deleteSection } from '../Roster.jsx';
 import { EditSectionModal } from '../SectionForm.jsx';
 import { ACCOUNT_LABEL, StudentAccountsModal } from '../StudentAccounts.jsx';
 import { AttendanceView } from '../Attendance.jsx';
-import { Avatar, DownloadButton, EmptyState, EqBadge, ErrorState, Hero, Icon, Menu, Modal, PageLoader, Stat, titleCase, useUI } from '../ui.jsx';
+import { Avatar, DownloadButton, EmptyState, EqBadge, ErrorState, Hero, Icon, Menu, Modal, PageLoader, titleCase, useUI } from '../ui.jsx';
 
 const SCALE = ['4.0', '3.5', '3.0', '2.5', '2.0', '1.5', '1.0', 'R'];
 const PASS_SCALE = ['Pass', 'Repeat'];
@@ -158,6 +158,7 @@ export default function SectionRecord() {
   return (
     <>
       <Hero
+        compact
         back={<Link to="/faculty" className="back"><Icon name="arrowLeft" size={15} /> Sections</Link>}
         eyebrow={[section.subjectCode, section.term, section.academicYear && `A.Y. ${section.academicYear}`].filter(Boolean).join(' · ')}
         title={<>{section.code}{section.subjectTitle && <span className="thin">{titleCase(section.subjectTitle)}</span>}</>}
@@ -197,7 +198,7 @@ export default function SectionRecord() {
           {schedule(section).map((x, i) => (
             <span key={i} className="meta-pill">
               <Icon name="calendar" size={14} />
-              {x.day}{x.time && ` · ${x.time}`}{x.room && ` · Room ${x.room}`}
+              {x.day}{x.time && ` · ${x.time}`}{x.room && ` · ${roomLabel(x.room, 'Room')}`}
             </span>
           ))}
           {section.units != null && <span className="meta-pill"><Icon name="book" size={14} />{section.units} units</span>}
@@ -207,21 +208,23 @@ export default function SectionRecord() {
         </div>
       </Hero>
 
-      <div className="container lift">
-        <div className="stats record-stats">
-          <Stat tone="blue" icon="users" label="Students" value={data.rows.length} />
-          <Stat tone="amber" icon={term === 'MID' ? 'chart' : 'award'} label={`Class average · ${TERM[term].name}`} value={<>{fmt(summary.avg)}<small>%</small></>} />
-          <Stat
-            tone="teal"
-            icon="check"
-            label={`Passing · ${TERM[term].name}`}
-            value={<>{summary.passing}<small> / {data.rows.length}</small></>}
-            sub={data.rows.length ? `${Math.round((summary.passing / data.rows.length) * 100)}% of the class` : null}
-          />
-          <div className="stat dist">
-            <div className="dist-head">
-              <span className="stat-label">Distribution · {TERM[term].gradeLabel}</span>
-            </div>
+      <div className="container wide">
+        <div className="kpis">
+          <div className="kpi">
+            <span className="kpi-label"><Icon name="users" size={14} /> Students</span>
+            <b className="kpi-value">{data.rows.length}</b>
+          </div>
+          <div className="kpi">
+            <span className="kpi-label"><Icon name={term === 'MID' ? 'chart' : 'award'} size={14} /> Class average · {TERM[term].name}</span>
+            <b className="kpi-value">{fmt(summary.avg)}<small>%</small></b>
+          </div>
+          <div className="kpi">
+            <span className="kpi-label"><Icon name="check" size={14} /> Passing · {TERM[term].name}</span>
+            <b className="kpi-value">{summary.passing}<small> / {data.rows.length}</small></b>
+            {data.rows.length > 0 && <span className="kpi-sub">{Math.round((summary.passing / data.rows.length) * 100)}%</span>}
+          </div>
+          <div className="kpi kpi-dist">
+            <span className="kpi-label">Distribution · {TERM[term].gradeLabel}</span>
             <div className="hist">
               {summary.dist.map((d) => (
                 <div key={d.eq} className={`hist-col ${isFail(d.eq) ? 'fail' : ''} ${d.n ? '' : 'zero'}`} title={`${d.eq}: ${d.n} students`}>

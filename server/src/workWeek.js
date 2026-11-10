@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { SheetXml } from './classRecordExport.js';
 import { splitPersonName, surnameOf } from './names.js';
+import { modeOf } from './schedule.js';
 
 export const WORKWEEK_TEMPLATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates/workweek-template.xlsx');
 const FIRST_ROW = 13; // 7:00 AM
@@ -56,7 +57,7 @@ export async function buildWorkWeek(faculty, sections, blocks, profile = {}, { t
   for (const s of sections) {
     for (const r of s.schedule || []) {
       if (!byDay[r.day] || !r.start || !r.end) continue;
-      const remote = r.mode === 'ONLINE';
+      const remote = modeOf(r) === 'ONLINE';
       const title = [s.subjectCode, s.subjectTitle].filter(Boolean).join(':').toUpperCase();
       const text = [title, s.code, `(${clock(r.start)} - ${clock(r.end)})`, r.room && !remote ? `RM:${r.room}` : r.room].filter(Boolean).join('\n');
       byDay[r.day].push({ start: toMin(r.start), end: toMin(r.end), kind: remote ? 'remote' : 'f2f', text });

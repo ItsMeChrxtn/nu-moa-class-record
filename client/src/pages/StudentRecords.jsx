@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, COMPONENTS, gradeBreakdown, schedule, termOf, track } from '../api.js';
+import { api, COMPONENTS, gradeBreakdown, roomLabel, schedule, termOf, track } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { EmptyState, ErrorState, Hero, Icon, PageLoader, Ring, displayName, eqTone, firstName, titleCase, useUI } from '../ui.jsx';
 import { downloadCertificate } from '../certificate.js';
@@ -79,7 +79,7 @@ function Report({ record, user }) {
   const finalsOpen = finalOnly ? items.length > 0 : items.some((i) => termOf(i) === 'POST');
   const [view, setView] = useState(finalsOpen ? 'POST' : 'MID');
   const term = finalOnly ? 'POST' : finalsOpen ? view : 'MID';
-  const sched = schedule(section).map((x) => [x.day, x.time, x.room && `Rm ${x.room}`].filter(Boolean).join(' · ')).filter(Boolean);
+  const sched = schedule(section).map((x) => [x.day, x.time, x.room && roomLabel(x.room)].filter(Boolean).join(' · ')).filter(Boolean);
 
   return (
     <>

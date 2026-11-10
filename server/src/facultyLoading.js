@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { SheetXml } from './classRecordExport.js';
-import { DAYS } from './schedule.js';
+import { DAYS, modeOf } from './schedule.js';
 import { surnameFirst, surnameOf } from './names.js';
 
 export const LOADING_TEMPLATE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../templates/faculty-loading-template.xlsx');
@@ -95,7 +95,7 @@ export async function buildLoadingReport(faculty, sections, blocks, profile = {}
     ws.set(`G${row}`, r.type || '');
     // Numeric rooms as numbers, so Excel doesn't flag "number stored as text".
     ws.set(`H${row}`, /^\d+$/.test(r.room || '') ? Number(r.room) : r.room || 'TBA');
-    ws.set(`I${row}`, r.mode || 'F2F');
+    ws.set(`I${row}`, modeOf(r));
     ws.set(`J${row}`, m.units);
     ws.set(`K${row}`, round2((toMin(r.end) - toMin(r.start)) / 60));
   }

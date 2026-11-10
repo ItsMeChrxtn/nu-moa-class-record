@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, downloadFile, meetingsOn, to12 } from './api.js';
+import { api, downloadFile, meetingsOn, roomLabel, to12 } from './api.js';
 import { Icon, Modal, TimeInput, titleCase, useUI } from './ui.jsx';
 
 const WEEK = [
@@ -174,7 +174,7 @@ export default function Timetable({ sections, blocks, onBlocksChange, termLabel,
                 };
                 const short = b.end - b.start <= 60;
                 return b.kind === 'class' ? (
-                  <Link key={i} to={`/faculty/sections/${b.s.id}`} className={`tt-block sc-${colors.get(b.s.id)} ${short ? 'short' : ''}`} style={style} title={`${b.s.code} · ${b.s.subjectTitle || ''}\n${b.time}${b.room ? ` · Rm ${b.room}` : ''}`}>
+                  <Link key={i} to={`/faculty/sections/${b.s.id}`} className={`tt-block sc-${colors.get(b.s.id)} ${short ? 'short' : ''}`} style={style} title={`${b.s.code} · ${b.s.subjectTitle || ''}\n${b.time}${b.room ? ` · ${roomLabel(b.room)}` : ''}`}>
                     <strong>{b.s.subjectCode ? `${b.s.subjectCode} · ` : ''}{b.s.code}</strong>
                     {!short && <span className="tt-subject">{titleCase(b.s.subjectTitle || '')}</span>}
                     <span className="tt-time">{b.time}{b.room ? ` · ${b.room}` : ''}</span>

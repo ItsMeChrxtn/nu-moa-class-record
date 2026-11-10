@@ -57,7 +57,7 @@ export function ForgotPassword() {
       eyebrow="Account recovery"
       title="Forgot your"
       accent="password?"
-      text="Type your student number or email. We'll email you a link to choose a new password."
+      text="Type your email. We'll email you a link to choose a new password."
     >
       {sent ? (
         <div className="auth-form">
@@ -76,7 +76,7 @@ export function ForgotPassword() {
       ) : (
         <form className="auth-form" onSubmit={submit}>
           <label className="field">
-            <span>Student number / Email</span>
+            <span>Email</span>
             <span className="input-icon">
               <Icon name="user" />
               <input

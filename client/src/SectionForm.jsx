@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, DAYS, rowsFromText, to12 } from './api.js';
+import { api, DAYS, isOnlineRoom, rowsFromText, to12 } from './api.js';
 import { Icon, Modal, TimeInput } from './ui.jsx';
 
 export const MODES = ['F2F', 'ONLINE', 'BLENDED'];
@@ -7,7 +7,19 @@ export const blankRow = () => ({ day: '', start: '', end: '', room: '', type: ''
 
 // Schedule rows: when the section meets. A faculty can add as many as they need.
 export function ScheduleEditor({ rows, onChange, highlighted }) {
-  const update = (i, k, v) => onChange(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)));
+  const update = (i, k, v) =>
+    onChange(
+      rows.map((r, j) => {
+        if (j !== i) return r;
+        const next = { ...r, [k]: v };
+        // Typing a long room name switches the row to online; going back to a room number undoes it.
+        if (k === 'room') {
+          if (isOnlineRoom(v)) next.mode = 'ONLINE';
+          else if (isOnlineRoom(r.room) && r.mode === 'ONLINE') next.mode = 'F2F';
+        }
+        return next;
+      })
+    );
   const remove = (i) => onChange(rows.length > 1 ? rows.filter((_, j) => j !== i) : [blankRow()]);
   const add = () => {
     // A new row starts with the previous row's times and room, which is usually what's needed.
@@ -42,7 +54,13 @@ export function ScheduleEditor({ rows, onChange, highlighted }) {
                 <option value="LEC">LEC</option>
                 <option value="LAB">LAB</option>
               </select>
-              <select value={r.mode || 'F2F'} onChange={(e) => update(i, 'mode', e.target.value)} aria-label={`Mode for row ${i + 1}`}>
+              <select
+                value={isOnlineRoom(r.room) ? 'ONLINE' : r.mode || 'F2F'}
+                onChange={(e) => update(i, 'mode', e.target.value)}
+                disabled={isOnlineRoom(r.room)}
+                title={isOnlineRoom(r.room) ? 'Online: the room is longer than 4 characters, so it is not a room number' : undefined}
+                aria-label={`Mode for row ${i + 1}`}
+              >
                 {MODES.map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
@@ -51,7 +69,7 @@ export function ScheduleEditor({ rows, onChange, highlighted }) {
             {bad && <span className="sched-error">The end time must be after the start time.</span>}
             {!bad && r.day && r.start && r.end && (
               <span className="sched-preview">
-                {r.day} · {to12(r.start)} – {to12(r.end)}{r.room && ` · Room ${r.room}`}{r.type && ` · ${r.type}`} · {r.mode || 'F2F'}
+                {r.day} · {to12(r.start)} – {to12(r.end)}{r.room && (isOnlineRoom(r.room) ? ` · ${r.room}` : ` · Room ${r.room}`)}{r.type && ` · ${r.type}`} · {isOnlineRoom(r.room) ? 'ONLINE' : r.mode || 'F2F'}
               </span>
             )}
           </div>

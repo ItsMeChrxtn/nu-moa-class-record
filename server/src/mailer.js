@@ -59,8 +59,8 @@ export function sendFacultyCredentials({ email, name, tempPassword, reset }) {
   });
 }
 
-// Student account for a section: signs in with the student number.
-export function sendStudentCredentials({ email, name, studentNo, tempPassword, section, faculty }) {
+// Student account for a section: signs in with this email (the student number also works).
+export function sendStudentCredentials({ email, name, tempPassword, section, faculty }) {
   const who = givenName(name);
   const course = [section.code, section.subjectTitle && titleCase(section.subjectTitle)].filter(Boolean).join(' · ');
   return sendCredentials({
@@ -69,9 +69,9 @@ export function sendStudentCredentials({ email, name, studentNo, tempPassword, s
     subject: `Your Class Record account for ${section.code}`,
     headingHtml: `Hi, <span style="color:#1d4ed8">${esc(who)}.</span>`,
     greeting: who,
-    intro: `${faculty ? titleCase(faculty) : 'Your faculty'} added you to ${course} on the NU MOA Class Record, where you can see your scores and grades. Sign in with your student number and this temporary password:`,
-    idLabel: 'Student number',
-    idValue: studentNo,
+    intro: `${faculty ? titleCase(faculty) : 'Your faculty'} added you to ${course} on the NU MOA Class Record, where you can see your scores and grades. Log in with this email address and this temporary password:`,
+    idLabel: 'Email',
+    idValue: email,
     tempPassword,
     contact: 'your faculty',
   });

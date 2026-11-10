@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 import { User, Student, Section, Enrollment, Notification, audit, notifyGrades } from './models.js';
 import { COMPONENTS, DEFAULT_WEIGHTS, MARKS, attendanceItems, cleanScale, computeGrades, scaleOf } from './grading.js';
 import { saveCredentials } from './credentials.js';
-import { HHMM_RE as HHMM, blocksOutside, cleanBlocks, cleanSchedule, legacyFields, workHoursOf } from './schedule.js';
+import { HHMM_RE as HHMM, blocksOutside, cleanBlocks, cleanSchedule, legacyFields, modeOf, workHoursOf } from './schedule.js';
 import { mailConfigured, sendPasswordReset, sendStudentCredentials } from './mailer.js';
 import { buildClassRecord, facultyTerms, gradingFileName } from './classRecordExport.js';
 import { PROFILE_FIELDS, buildLoadingReport, loadingFileName } from './facultyLoading.js';
@@ -36,10 +36,11 @@ router.post(
   loginLimiter,
   wrap(async (req, res) => {
     const { username, password } = req.body || {};
-    // Usernames are stored lowercase (faculty NU emails, student numbers, admin).
-    const user = await User.findOne({ username: String(username || '').trim().toLowerCase() });
+    // Faculty sign in with their NU email, students with the email on their class list
+    // (their student number still works too), the admin with "admin".
+    const user = await findLoginUser(username);
     const ok = user && (await bcrypt.compare(String(password || ''), user.passwordHash));
-    if (!ok) return res.status(401).json({ error: 'Incorrect username or password.' });
+    if (!ok) return res.status(401).json({ error: 'Incorrect email or password.' });
     if (user.disabled)
       return res.status(403).json({ error: 'This account has been disabled. Please contact the administrator.' });
     user.lastLoginAt = new Date();
@@ -85,14 +86,18 @@ const forgotLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, message: {
 const RESET_MS = 60 * 60 * 1000;
 const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 
-async function accountFor(login) {
+// The account for a username, a student number, or a student's class-list email.
+async function findLoginUser(login) {
   const id = String(login || '').trim().toLowerCase().slice(0, 100);
-  if (!id) return {};
-  let user = await User.findOne({ username: id });
-  if (!user && id.includes('@')) {
-    const students = await Student.find({ email: id }).select('_id');
-    if (students.length) user = await User.findOne({ role: 'student', student: { $in: students.map((s) => s._id) } });
-  }
+  if (!id) return null;
+  const user = await User.findOne({ username: id });
+  if (user || !id.includes('@')) return user;
+  const students = await Student.find({ email: id }).select('_id');
+  return students.length ? User.findOne({ role: 'student', student: { $in: students.map((s) => s._id) } }) : null;
+}
+
+async function accountFor(login) {
+  const user = await findLoginUser(login);
   if (!user || user.disabled) return {};
   if (user.role === 'student') {
     const s = await Student.findById(user.student).select('email');
@@ -961,7 +966,7 @@ function sectionSummary(s) {
     code: s.code,
     subjectCode: s.subjectCode,
     subjectTitle: s.subjectTitle,
-    schedule: s.schedule?.length ? s.schedule.map(({ day, start, end, room, type, mode }) => ({ day, start, end, room, type: type || '', mode: mode || 'F2F' })) : [],
+    schedule: s.schedule?.length ? s.schedule.map(({ day, start, end, room, type, mode }) => ({ day, start, end, room, type: type || '', mode: modeOf({ room, mode }) })) : [],
     day: s.day,
     time: s.time,
     room: s.room,

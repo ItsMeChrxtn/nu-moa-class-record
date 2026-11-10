@@ -1,6 +1,9 @@
 // A section meets one or more times a week: [{ day: 'MON', start: '07:00', end: '09:40', room: '1032' }].
 export const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 export const MODES = ['F2F', 'ONLINE', 'BLENDED']; // how a class meets, for the faculty loading report
+// A room name longer than 4 characters (e.g. "ONLINE", "GMEET", a link) is not a room number: the class is online.
+export const isOnlineRoom = (room) => String(room ?? '').trim().length > 4;
+export const modeOf = (r) => (isOnlineRoom(r?.room) ? 'ONLINE' : MODES.includes(String(r?.mode || '').toUpperCase()) ? String(r.mode).toUpperCase() : 'F2F');
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export function to12(hhmm) {
@@ -19,7 +22,7 @@ export function cleanSchedule(input) {
     const end = String(r?.end || '');
     const room = String(r?.room ?? '').trim().slice(0, 30);
     const type = ['LEC', 'LAB'].includes(String(r?.type || '').toUpperCase()) ? String(r.type).toUpperCase() : '';
-    const mode = MODES.includes(String(r?.mode || '').toUpperCase()) ? String(r.mode).toUpperCase() : 'F2F';
+    const mode = modeOf({ room, mode: r?.mode });
     if (!day && !start && !end && !room) continue; // blank row
     const n = `Schedule row ${i + 1}`;
     if (!DAYS.includes(day)) return { error: `${n}: choose a day.` };

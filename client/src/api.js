@@ -225,3 +225,8 @@ export function schedule(section) {
     room: i === 0 ? section.room || '' : '',
   }));
 }
+
+// A room longer than 4 characters (e.g. "ONLINE", "GMEET", a link) is not a room number: the class is online.
+export const isOnlineRoom = (room) => String(room ?? '').trim().length > 4;
+// "Rm 401", or "Online · GMEET" for an online class.
+export const roomLabel = (room, prefix = 'Rm') => (!room ? '' : isOnlineRoom(room) ? `Online · ${room}` : `${prefix} ${room}`);
