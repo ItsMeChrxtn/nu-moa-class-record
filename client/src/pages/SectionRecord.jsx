@@ -4,6 +4,7 @@ import { api, COMPONENTS, PERIODS, TERM_COMPONENTS, fmt, groupItems, roomLabel, 
 import { AddStudentsModal, ImportResultModal, deleteSection } from '../Roster.jsx';
 import { EditSectionModal } from '../SectionForm.jsx';
 import { ACCOUNT_LABEL, StudentAccountsModal } from '../StudentAccounts.jsx';
+import { BarRows, ChartCard, ChartEmpty, Line } from '../Charts.jsx';
 import { AttendanceView } from '../Attendance.jsx';
 import { Avatar, DownloadButton, EmptyState, EqBadge, ErrorState, Hero, Icon, Menu, Modal, PageLoader, titleCase, useUI } from '../ui.jsx';
 
@@ -69,6 +70,30 @@ export default function SectionRecord() {
     const passing = rows.filter((r) => !isFail(r.grades[k].equivalent)).length;
     return { avg, dist, passing };
   }, [data, term]);
+
+  // Charts: class average per component for this term, and attendance per session over time.
+  const insights = useMemo(() => {
+    if (!data || !data.rows.length) return null;
+    const PERIOD = { MID: 'Mid', POST: 'Finals' };
+    const comps = groups.map((g) => {
+      let got = 0, max = 0;
+      for (const r of data.rows) for (const it of g.items) { got += Number(r.scores[it.id] || 0); max += it.max || 0; }
+      const name = COMPONENT_NAME[g.component] || g.component;
+      return { label: g.period && !finalOnly ? `${g.component} · ${PERIOD[g.period]}` : g.component, sub: `${name} · ${plural(g.items.length, 'item')}`, values: [max ? Math.round((got / max) * 1000) / 10 : null] };
+    });
+    const sessions = [...(data.section.attendance?.sessions || [])].sort((a, b) => a.date.localeCompare(b.date));
+    const trend = sessions.map((ss) => {
+      let ok = 0, all = 0;
+      for (const r of data.rows) {
+        const m = r.attendance?.marks?.[ss.id];
+        if (m === 'P' || m === 'L') ok++;
+        if (m === 'P' || m === 'L' || m === 'A') all++;
+      }
+      const d = new Date(`${ss.date}T00:00:00`);
+      return { label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), title: d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + (ss.label ? ` · ${ss.label}` : ''), value: all ? Math.round((ok / all) * 100) : null };
+    });
+    return { comps, trend };
+  }, [data, groups, finalOnly]);
 
   if (error) return <ErrorState message={error} />;
   if (!data) return <PageLoader />;
@@ -236,6 +261,21 @@ export default function SectionRecord() {
             </div>
           </div>
         </div>
+
+        {insights && tab !== 'attendance' && (
+          <div className="dash-charts two rec-charts">
+            <ChartCard title={`Average by component · ${TERM[term].name}`} sub="Class average, percent of the total score">
+              {insights.comps.some((c) => c.values[0] != null) ? (
+                <BarRows rows={insights.comps} series={['Class average']} threshold={60} thresholdLabel="60%" />
+              ) : (
+                <ChartEmpty>Add items to see the averages.</ChartEmpty>
+              )}
+            </ChartCard>
+            <ChartCard title="Attendance per session" sub="Present or late, percent of the class">
+              {insights.trend.length ? <Line points={insights.trend} height={140} /> : <ChartEmpty>No attendance yet. Open the Attendance tab to take it.</ChartEmpty>}
+            </ChartCard>
+          </div>
+        )}
 
         {data.rows.length === 0 ? (
           <div style={{ marginTop: 18 }}>

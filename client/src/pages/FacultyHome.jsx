@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { BarRows, ChartCard, ChartEmpty, Columns } from '../Charts.jsx';
 import { api, meetingsOn, roomLabel, schedule, todayCode } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { NewSectionModal, deleteSection } from '../Roster.jsx';
@@ -165,6 +166,52 @@ function SectionCard({ s, color, onDelete }) {
   );
 }
 
+// Equivalents from best to worst (4.0 … 1.0, then R); pass/fail scales after.
+const eqRank = (eq) => (eq === 'R' || eq === 'Repeat' ? -1 : Number.isFinite(Number(eq)) ? Number(eq) : -0.5);
+const isFail = (eq) => eq === 'R' || eq === 'Repeat' || eq === 'F' || eq === 'Failed';
+
+// The latest term at a glance: averages, grade spread and attendance per section.
+function DashCharts({ sections, term }) {
+  const withGrades = sections.filter((s) => s.midtermAverage != null || s.finalAverage != null);
+  const dist = {};
+  for (const s of sections) for (const [eq, n] of Object.entries(s.gradeDist || {})) dist[eq] = (dist[eq] || 0) + n;
+  const eqs = Object.keys(dist).sort((a, b) => eqRank(b) - eqRank(a));
+  const graded = eqs.reduce((a, k) => a + dist[k], 0);
+  const failing = eqs.filter(isFail).reduce((a, k) => a + dist[k], 0);
+  const withAtt = sections.filter((s) => s.attendanceRate != null);
+  const termName = term ? term.term || 'Latest term' : '';
+  return (
+    <div className="dash-charts">
+      <ChartCard title="Class average by section" sub={`${termName} · percent`} legend={['Midterm', 'Final']}>
+        {withGrades.length ? (
+          <BarRows
+            series={['Midterm', 'Final']}
+            threshold={60}
+            thresholdLabel="Passing line"
+            rows={withGrades.map((s) => ({ label: s.code, sub: s.subjectTitle && titleCase(s.subjectTitle), values: [s.midtermAverage, s.finalsItemCount ? s.finalAverage : null] }))}
+          />
+        ) : (
+          <ChartEmpty>Averages appear once a section has scores.</ChartEmpty>
+        )}
+      </ChartCard>
+      <ChartCard title="Grade distribution" sub={graded ? `${graded} students · ${failing} failing` : 'All sections this term'}>
+        {graded ? (
+          <Columns data={eqs.map((eq) => ({ label: eq, value: dist[eq], tone: isFail(eq) ? 'fail' : '', title: `Grade ${eq}` }))} unit=" students" />
+        ) : (
+          <ChartEmpty>No grades yet.</ChartEmpty>
+        )}
+      </ChartCard>
+      <ChartCard title="Attendance rate" sub="Present or late, by section">
+        {withAtt.length ? (
+          <BarRows series={['Attendance']} threshold={80} thresholdLabel="80%" rows={withAtt.map((s) => ({ label: s.code, sub: `${s.sessionCount} session${s.sessionCount === 1 ? '' : 's'}`, values: [s.attendanceRate] }))} />
+        ) : (
+          <ChartEmpty>Take attendance in a section to see it here.</ChartEmpty>
+        )}
+      </ChartCard>
+    </div>
+  );
+}
+
 export default function FacultyHome() {
   const { user } = useAuth();
   const { confirm, toast } = useUI();
@@ -175,19 +222,10 @@ export default function FacultyHome() {
   const [blocks, setBlocks] = useState([]);
   const [workHours, setWorkHours] = useState(undefined);
   const [reporting, setReporting] = useState(false);
-  const [view, setView] = useState(() => {
-    try {
-      return localStorage.getItem('faculty-view') || 'sections';
-    } catch {
-      return 'sections';
-    }
-  });
-  const pick = (v) => {
-    setView(v);
-    try {
-      localStorage.setItem('faculty-view', v);
-    } catch {}
-  };
+  // Dashboard or weekly schedule, chosen in the sidebar (?view=schedule).
+  const [params, setParams] = useSearchParams();
+  const view = params.get('view') === 'schedule' ? 'schedule' : 'sections';
+  const pick = (v) => setParams(v === 'schedule' ? { view: 'schedule' } : {});
 
   useEffect(() => {
     api('/faculty/sections')
@@ -257,16 +295,7 @@ export default function FacultyHome() {
           <TodayPanel sections={latest?.sections || []} colors={colors} onOpenWeek={() => pick('schedule')} />
         </div>
 
-        {sections.length > 0 && (
-          <div className="view-tabs home-tabs" role="tablist">
-            <button role="tab" aria-selected={view === 'sections'} onClick={() => pick('sections')}>
-              <Icon name="layers" size={15} /> Sections
-            </button>
-            <button role="tab" aria-selected={view === 'schedule'} onClick={() => pick('schedule')}>
-              <Icon name="calendar" size={15} /> Weekly schedule
-            </button>
-          </div>
-        )}
+        {sections.length > 0 && view === 'sections' && <DashCharts sections={latest?.sections || []} term={latest} />}
 
         {sections.length > 0 && view === 'schedule' ? (
           <Timetable sections={latest?.sections || []} blocks={blocks} onBlocksChange={setBlocks} termLabel={latest?.label} onExport={() => setReporting(true)} workHours={workHours} onWorkHoursChange={setWorkHours} />

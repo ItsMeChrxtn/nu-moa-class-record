@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
+import { ChartCard, ChartEmpty, Columns, Stack } from '../Charts.jsx';
 import { useAuth } from '../auth.jsx';
 import { Avatar, EmptyState, ErrorState, Hero, Icon, Modal, PageLoader, Stat, TodayChip, firstName, titleCase, useUI } from '../ui.jsx';
 
@@ -74,24 +76,13 @@ const termKey = (s) => `${s.academicYear || ''}|${s.term || ''}`;
 
 export default function AdminHome() {
   const { user } = useAuth();
-  const [tab, setTab] = useState(() => {
-    try {
-      return localStorage.getItem('admin-tab') || 'faculty';
-    } catch {
-      return 'faculty';
-    }
-  });
+  // The sidebar picks the tab (?tab=…).
+  const [params] = useSearchParams();
+  const tab = TABS.some((t) => t.key === params.get('tab')) ? params.get('tab') : 'faculty';
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState('');
   const refresh = useCallback(() => api('/admin/overview').then(setOverview).catch((e) => setError(e.message)), []);
   useEffect(() => void refresh(), [refresh]);
-
-  const pick = (k) => {
-    setTab(k);
-    try {
-      localStorage.setItem('admin-tab', k);
-    } catch {}
-  };
 
   if (error) return <ErrorState message={error} />;
   if (!overview) return <PageLoader />;
@@ -112,13 +103,29 @@ export default function AdminHome() {
           <Stat tone="ink" icon="key" label="Student accounts" value={<>{overview.activeAccounts ?? 0}<small> / {overview.accounts ?? 0}</small></>} sub="Signed in and set a password" />
         </div>
 
-        <div className="tabs" role="tablist">
-          {TABS.map((t) => (
-            <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => pick(t.key)}>
-              <Icon name={t.icon} size={15} /> {t.label}
-            </button>
-          ))}
+        <div className="dash-charts two">
+          <ChartCard title="Activity" sub={`Last 14 days · ${(overview.activity || []).reduce((a, d) => a + d.n, 0)} actions`}>
+            {!(overview.activity || []).some((d) => d.n) ? <ChartEmpty>No activity in the last 14 days.</ChartEmpty> : <Columns
+              data={(overview.activity || []).map((d) => {
+                const day = new Date(`${d.day}T00:00:00`);
+                return { label: day.toLocaleDateString(undefined, { day: 'numeric' }), value: d.n, title: day.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) };
+              })}
+              unit=" actions"
+              showValues={false}
+            />}
+          </ChartCard>
+          <ChartCard title="Student accounts" sub={`${overview.accounts ?? 0} accounts`}>
+            <Stack
+              parts={[
+                { label: 'Signed in', value: overview.activeAccounts ?? 0, color: 'var(--teal)' },
+                { label: 'Emailed, not signed in', value: overview.sentAccounts ?? 0, color: 'var(--blue)' },
+                { label: 'Not sent yet', value: Math.max(0, (overview.accounts ?? 0) - (overview.activeAccounts ?? 0) - (overview.sentAccounts ?? 0)), color: 'var(--line-2)' },
+              ]}
+            />
+            <p className="ch-foot">{overview.students - (overview.accounts ?? 0) > 0 ? `${overview.students - overview.accounts} students have no account yet.` : 'Every student has an account.'}</p>
+          </ChartCard>
         </div>
+        <h2 className="tab-title"><Icon name={TABS.find((t) => t.key === tab).icon} size={18} /> {TABS.find((t) => t.key === tab).label}</h2>
 
         {tab === 'faculty' && <FacultyTab onChange={refresh} mailConfigured={overview.mailConfigured} />}
         {tab === 'sections' && <SectionsTab />}

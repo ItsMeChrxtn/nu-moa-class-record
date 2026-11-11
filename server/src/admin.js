@@ -49,7 +49,22 @@ admin.get(
       User.countDocuments({ role: 'student' }),
       User.countDocuments({ role: 'student', mustChangePassword: false }), // signed in and set their own password
     ]);
-    res.json({ faculty, disabled, sections, published, students, enrollments, accounts, activeAccounts, mailConfigured: mailConfigured() });
+    // Emailed but not signed in yet.
+    const sentAccounts = await User.countDocuments({ role: 'student', mustChangePassword: true, credentialsSentAt: { $ne: null } });
+    // Actions per day for the last 14 days (Philippine time), for the activity chart.
+    const since = new Date(Date.now() - 13 * 86400000);
+    since.setUTCHours(-8, 0, 0, 0);
+    const perDay = await AuditLog.aggregate([
+      { $match: { createdAt: { $gte: since } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'Asia/Manila' } }, n: { $sum: 1 } } },
+    ]);
+    const counts = Object.fromEntries(perDay.map((d) => [d._id, d.n]));
+    const activity = [];
+    for (let i = 13; i >= 0; i--) {
+      const day = new Date(Date.now() + 8 * 3600000 - i * 86400000).toISOString().slice(0, 10);
+      activity.push({ day, n: counts[day] || 0 });
+    }
+    res.json({ faculty, disabled, sections, published, students, enrollments, accounts, activeAccounts, sentAccounts, activity, mailConfigured: mailConfigured() });
   })
 );
 

@@ -279,16 +279,31 @@ faculty.get(
       sections: sections.map((s) => {
         const list = bySection.get(String(s._id)) || [];
         const grades = list.map((e) => computeGrades(s, e));
+        const finalsItemCount = s.items.filter((i) => i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST')).length;
+        // The grade that matters now: the final grade once Finals has items, the midterm grade before.
+        const now = (g) => (finalsItemCount || s.gradingMode === 'final' ? g.final : g.midterm);
+        const gradeDist = {};
+        if (s.items.length) for (const g of grades) gradeDist[now(g).equivalent] = (gradeDist[now(g).equivalent] || 0) + 1;
+        // Present or late out of every marked, non-excused session.
+        const att = { ok: 0, all: 0 };
+        for (const e of list) {
+          const c = attendanceSummary(s, e).counts || {};
+          att.ok += (c.P || 0) + (c.L || 0);
+          att.all += (c.P || 0) + (c.L || 0) + (c.A || 0);
+        }
         return {
           ...sectionSummary(s),
           published: s.published,
           studentCount: list.length,
           itemCount: s.items.length,
           // MPT counts as Midterms, CPT as Finals; CP/EA by their period.
-          finalsItemCount: s.items.filter((i) => i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST')).length,
+          finalsItemCount,
           // Class averages for the dashboard cards (null until the section has students and items).
           midtermAverage: s.items.length && s.gradingMode !== 'final' ? avg(grades.map((g) => g.midterm.percent)) : null,
           finalAverage: s.items.length ? avg(grades.map((g) => g.final.percent)) : null,
+          gradeDist, // { "2.5": 4, ... } for the current grade
+          attendanceRate: att.all ? Math.round((att.ok / att.all) * 1000) / 10 : null,
+          sessionCount: s.attendance?.sessions?.length || 0,
         };
       }),
     });
