@@ -161,6 +161,32 @@ router.post(
   })
 );
 
+// ---------- Profile picture (any signed-in user) ----------
+
+// A small JPEG/PNG/WebP data URL, resized in the browser (about 256 px).
+const PHOTO_RE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+router.put(
+  '/me/photo',
+  requireAuth,
+  wrap(async (req, res) => {
+    const photo = String(req.body?.photo || '');
+    if (!PHOTO_RE.test(photo)) return res.status(400).json({ error: 'Choose a JPG, PNG or WebP image.' });
+    if (photo.length > 90000) return res.status(413).json({ error: 'That picture is too large. Try a smaller one.' });
+    req.user.photo = photo;
+    await req.user.save();
+    res.json({ user: publicUser(req.user) });
+  })
+);
+router.delete(
+  '/me/photo',
+  requireAuth,
+  wrap(async (req, res) => {
+    req.user.photo = undefined;
+    await req.user.save();
+    res.json({ user: publicUser(req.user) });
+  })
+);
+
 // ---------- Student ----------
 
 router.get(

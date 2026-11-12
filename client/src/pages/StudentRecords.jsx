@@ -44,6 +44,7 @@ export default function StudentRecords() {
       <WelcomeBanner
         eyebrow={`Student · ${user.username}`}
         title={<>Hello, <span className="accent">{firstName(user.name)}</span></>}
+        facts={records.length ? [{ label: 'Classes', value: records.length }, { label: 'Average', value: avg == null ? '—' : `${avg.toFixed(1)}%` }, { label: 'Attendance', value: attAll ? `${Math.round(((att.P + att.L) / attAll) * 100)}%` : '—' }] : []}
         lead={records.length ? `${records.length} class${records.length === 1 ? '' : 'es'} with published grades` : 'Your grades will appear here once your faculty publishes them.'}
       />
       {records.length > 0 && (

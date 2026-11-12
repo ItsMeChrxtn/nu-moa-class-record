@@ -16,6 +16,7 @@ const userSchema = new Schema(
     credentialsSentAt: Date, // when the current temporary password was emailed
     accountBy: { type: Schema.Types.ObjectId, ref: 'User' }, // who issued the current temporary password
     phone: String, // faculty: contact number, edited on their profile
+    photo: String, // profile picture, a small JPEG data URL (resized in the browser)
     // "Forgot password": a one-hour link emailed to the user. Only the SHA-256 of the token is kept.
     resetTokenHash: String,
     resetTokenExpires: Date,

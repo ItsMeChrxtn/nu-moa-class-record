@@ -132,7 +132,8 @@ function AdminDashboard({ overview, user }) {
       <WelcomeBanner
         eyebrow="Administrator · NU MOA"
         title={<>Welcome back, <span className="accent">{firstName(user.name)}</span></>}
-        lead={`${overview.faculty} faculty  ·  ${overview.sections} sections  ·  ${overview.students} students`}
+        lead="Faculty accounts, sections and student records across NU MOA."
+        facts={[{ label: 'Faculty', value: overview.faculty }, { label: 'Sections', value: overview.sections }, { label: 'Students', value: overview.students }]}
         actions={<Link className="btn primary" to="/admin?tab=faculty"><Icon name="userPlus" size={16} /> Faculty accounts</Link>}
       />
       <div className="kpi-row">

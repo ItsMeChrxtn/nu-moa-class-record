@@ -358,6 +358,7 @@ export default function FacultyHome() {
             title={<>{greeting()}, <span className="accent">{firstName(user.name)}</span></>}
             lead={todayLine(current)}
             actions={newButton}
+            facts={sections.length ? [{ label: 'Sections', value: current.length }, { label: 'Students', value: students }, { label: 'Average', value: termAverage == null ? '—' : `${termAverage.toFixed(1)}%` }] : []}
           />
 
           {sections.length === 0 ? (

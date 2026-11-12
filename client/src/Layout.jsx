@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api } from './api.js';
 import { useAuth } from './auth.jsx';
 import NotificationBell from './Notifications.jsx';
+import PhotoModal from './PhotoModal.jsx';
 import { Avatar, BrandMark, Icon, TodayChip, firstName, titleCase, useUI } from './ui.jsx';
 
 const ADMIN_TABS = [
@@ -21,6 +22,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
   const [sections, setSections] = useState([]); // every section of this faculty
   const [secOpen, setSecOpen] = useState(true); // Sections dropdown in the sidebar
   const ready = user && !user.mustChangePassword;
@@ -84,8 +86,6 @@ export default function Layout() {
           </div>
         )}
         {item('/faculty?view=schedule', 'calendar', 'Weekly schedule', onPath('/faculty') && view === 'schedule')}
-        <span className="side-label">Account</span>
-        {item('/faculty/profile', 'user', 'My profile', onPath('/faculty/profile'))}
       </>
     );
   } else if (ready && user.role === 'admin') {
@@ -118,18 +118,6 @@ export default function Layout() {
               </span>
             </Link>
             <nav className="side-nav" aria-label="Main">{nav}</nav>
-            <div className="side-foot">
-              <div className="side-user">
-                <Avatar name={user.name} size={34} />
-                <span className="side-user-meta">
-                  <strong title={titleCase(user.name)}>{titleCase(user.name)}</strong>
-                  <small>{{ admin: 'Administrator', faculty: 'Faculty', student: user.username }[user.role]}</small>
-                </span>
-              </div>
-              <button className="btn side-logout" onClick={doLogout}>
-                <Icon name="logout" size={16} /> Log out
-              </button>
-            </div>
           </aside>
           {open && <div className="side-scrim" onClick={() => setOpen(false)} />}
         </>
@@ -155,22 +143,12 @@ export default function Layout() {
               <div className="topbar-user">
                 {nav && <span className="hide-sm"><TodayChip /></span>}
                 {user.role === 'student' && ready && <NotificationBell />}
-                {nav && (
-                  <span className="top-me hide-sm" title={titleCase(user.name)}>
-                    <Avatar name={user.name} size={32} />
-                    <span><strong>{firstName(user.name)}</strong><small>{{ admin: 'Administrator', faculty: 'Faculty', student: 'Student' }[user.role]}</small></span>
-                  </span>
-                )}
-                {!nav && (
-                  <button className="btn" title="Log out" onClick={doLogout}>
-                    <Icon name="logout" size={16} />
-                    <span className="hide-sm">Log out</span>
-                  </button>
-                )}
+                <UserMenu user={user} onPhoto={() => setPhotoOpen(true)} onLogout={doLogout} />
               </div>
             )}
           </div>
         </header>
+        {photoOpen && <PhotoModal onClose={() => setPhotoOpen(false)} />}
         <main className="main">
           <Outlet />
         </main>
@@ -205,6 +183,56 @@ function SectionSearch({ sections }) {
             <li key={s.id}><button type="button" onMouseDown={(e) => { e.preventDefault(); go(s); }}><b>{s.code}</b><span>{titleCase(s.subjectTitle || s.subjectCode || '')}</span></button></li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+// The name in the top bar opens: My profile (faculty), Change photo, Log out.
+function UserMenu({ user, onPhoto, onLogout }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const location = useLocation();
+  useEffect(() => setOpen(false), [location.pathname, location.search]);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => !ref.current?.contains(e.target) && setOpen(false);
+    const esc = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  const role = { admin: 'Administrator', faculty: 'Faculty', student: 'Student' }[user.role];
+  const run = (fn) => () => {
+    setOpen(false);
+    fn();
+  };
+  return (
+    <div className="user-menu" ref={ref}>
+      <button type="button" className={`top-me ${open ? 'on' : ''}`} onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open}>
+        <Avatar name={user.name} photo={user.photo} size={34} />
+        <span className="hide-sm"><strong>{firstName(user.name)}</strong><small>{role}</small></span>
+        <Icon name="chevronDown" size={15} className="top-me-caret" />
+      </button>
+      {open && (
+        <div className="user-pop" role="menu">
+          <div className="user-pop-head">
+            <Avatar name={user.name} photo={user.photo} size={44} />
+            <span>
+              <strong>{titleCase(user.name)}</strong>
+              <small>{user.role === 'student' ? user.username : role}</small>
+            </span>
+          </div>
+          {user.role === 'faculty' && !user.mustChangePassword && (
+            <Link to="/faculty/profile" role="menuitem" className="user-pop-item"><Icon name="user" size={16} /> My profile</Link>
+          )}
+          <button type="button" role="menuitem" className="user-pop-item" onClick={run(onPhoto)}><Icon name="upload" size={16} /> {user.photo ? 'Change photo' : 'Add a photo'}</button>
+          <hr />
+          <button type="button" role="menuitem" className="user-pop-item danger" onClick={run(onLogout)}><Icon name="logout" size={16} /> Log out</button>
+        </div>
       )}
     </div>
   );

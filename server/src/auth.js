@@ -64,5 +64,6 @@ export function publicUser(user) {
     name: user.name,
     role: user.role,
     mustChangePassword: user.mustChangePassword,
+    photo: user.photo || null,
   };
 }

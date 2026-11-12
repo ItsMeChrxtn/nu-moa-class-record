@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { Avatar, Hero, Icon, PageLoader, titleCase, useUI } from '../ui.jsx';
+import PhotoModal from '../PhotoModal.jsx';
 
 // The faculty member's own details. The employee ID is the same one the schedule files print.
 export default function Profile() {
-  const { setUser } = useAuth();
+  const { user, setUser } = useAuth();
+  const [photoOpen, setPhotoOpen] = useState(false);
   const { toast } = useUI();
   const [saved, setSaved] = useState(null);
   const [form, setForm] = useState(null);
@@ -61,7 +63,10 @@ export default function Profile() {
       <div className="container lift">
         <form className="card narrow-card profile-card" onSubmit={submit}>
           <div className="card-icon-head">
-            <Avatar name={form.name || saved.name} size={48} />
+            <button type="button" className="profile-photo" onClick={() => setPhotoOpen(true)} title="Change profile picture">
+              <Avatar name={form.name || saved.name} photo={user?.photo} size={56} />
+              <span><Icon name="upload" size={12} /></span>
+            </button>
             <div>
               <h2>My details</h2>
               <p>{saved.email || saved.username}</p>
@@ -109,6 +114,7 @@ export default function Profile() {
           <Link to="/change-password" className="btn block"><Icon name="lock" size={16} /> Change password</Link>
         </form>
       </div>
+      {photoOpen && <PhotoModal onClose={() => setPhotoOpen(false)} />}
     </>
   );
 }

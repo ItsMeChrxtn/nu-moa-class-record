@@ -2233,3 +2233,74 @@ code, kbd { background: var(--surface-2); border-color: var(--line-2); color: va
 .term-group.closed .term-caret { transform: rotate(-90deg); }
 .term-group.closed .section-title-row { margin-bottom: 0; }
 .section-card.add-card { border: 1.5px dashed var(--line-2); box-shadow: none; background: transparent; }
+
+/* ───────────── Hero: NU MOA campus banner ───────────── */
+.hero-nu { position: relative; overflow: hidden; isolation: isolate; min-height: 260px; border-radius: 20px; background: #0b1a52; box-shadow: 0 24px 50px -28px #0b1a52cc; }
+.hero-nu-photo { position: absolute; inset: 0; z-index: -2; background: url('/nu-moa.jpg') 78% 18% / cover no-repeat; transform: scale(1.04); }
+.hero-nu-shade { position: absolute; inset: 0; z-index: -1;
+  background:
+    linear-gradient(90deg, #0a1648 0%, #0f2370f2 34%, #1838a8b3 58%, #1838a826 82%, transparent 100%),
+    linear-gradient(0deg, #0a164899 0%, transparent 45%); }
+.hero-nu::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: linear-gradient(90deg, var(--gold) 0 34%, transparent 34%); }
+.hero-nu-body { position: relative; display: grid; gap: 10px; max-width: 640px; padding: 26px 34px 30px; color: #fff; }
+.hero-nu-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.hero-nu-tag { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; border-radius: 999px; background: #ffffff14; border: 1px solid #ffffff24; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #dbe4ff; backdrop-filter: blur(6px); }
+.hero-nu-tag i { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 3px #f5b10033; }
+.hero-nu-date { font-size: 0.78rem; font-weight: 500; color: #aebde9; }
+.hero-nu h1 { margin: 4px 0 0; font-size: clamp(2rem, 3.6vw, 2.9rem); font-weight: 800; line-height: 1.02; letter-spacing: -0.04em; color: #fff; }
+.hero-nu h1 .accent { display: inline-block; color: var(--gold); background: none; -webkit-text-fill-color: currentColor; }
+.hero-nu-lead { margin: 0; font-size: 0.98rem; color: #d5ddf7; }
+.hero-nu-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; margin-top: 10px; }
+.hero-nu-actions { display: flex; gap: 10px; }
+.hero-nu-actions .btn.primary { height: 46px; padding: 0 20px; border-radius: 12px; background: var(--gold); color: #1a1300; font-weight: 700; box-shadow: 0 12px 26px -12px #f5b100; }
+.hero-nu-actions .btn.primary:not(:disabled):hover { background: #ffc21f; color: #1a1300; }
+.hero-nu-actions .btn:not(.primary) { height: 46px; background: #ffffff14; border-color: #ffffff33; color: #fff; }
+.hero-nu-facts { display: flex; gap: 0; margin: 0; padding: 0; }
+.hero-nu-facts > div { padding: 0 20px; border-left: 1px solid #ffffff2e; }
+.hero-nu-facts > div:first-child { padding-left: 0; border-left: 0; }
+.hero-nu-facts dt { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9fb0e0; }
+.hero-nu-facts dd { margin: 2px 0 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; color: #fff; font-variant-numeric: tabular-nums; }
+.hero-nu-mark { position: absolute; right: 26px; bottom: 18px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.32em; color: #ffffffcc; text-shadow: 0 2px 10px #0008; }
+@media (max-width: 760px) {
+  .hero-nu-photo { background-position: 70% 20%; opacity: 0.5; }
+  .hero-nu-shade { background: linear-gradient(180deg, #0f2370e6, #0a1648f2); }
+  .hero-nu-body { padding: 22px; }
+  .hero-nu-facts > div { padding: 0 14px; }
+  .hero-nu-mark { display: none; }
+}
+/* Avatar photo */
+.avatar { overflow: hidden; }
+.avatar.has-photo { background: var(--surface-3); border-color: transparent; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Top-right user menu */
+.user-menu { position: relative; }
+.top-me { display: inline-flex; align-items: center; gap: 10px; height: 44px; padding: 4px 10px 4px 4px; border: 1px solid transparent; border-left: 1px solid var(--line); border-radius: 12px; background: none; color: var(--ink); cursor: pointer; text-align: left; font: inherit; }
+.top-me:hover, .top-me.on { background: var(--surface-2); border-color: var(--line); }
+.top-me .avatar { border-radius: 10px; }
+.top-me-caret { color: var(--ink-3); transition: transform 0.15s; }
+.top-me.on .top-me-caret { transform: rotate(180deg); }
+.user-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; width: 250px; padding: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--hard-lg); animation: pop-in 0.14s ease-out both; }
+.user-pop-head { display: flex; align-items: center; gap: 10px; padding: 10px 10px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.user-pop-head span { display: grid; min-width: 0; }
+.user-pop-head strong { font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-pop-head small { font-size: 0.74rem; color: var(--ink-3); }
+.user-pop-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: inherit; font-size: 0.86rem; font-weight: 500; text-decoration: none; text-align: left; cursor: pointer; }
+.user-pop-item .icon { color: var(--ink-3); }
+.user-pop-item:hover { background: var(--surface-2); }
+.user-pop-item.danger, .user-pop-item.danger .icon { color: var(--red-ink); }
+.user-pop-item.danger:hover { background: var(--red-soft); }
+.user-pop hr { margin: 4px 2px; border: 0; border-top: 1px solid var(--line); }
+/* Photo picker */
+.photo-pick { display: grid; justify-items: center; gap: 12px; padding: 6px 0 2px; }
+.photo-frame { position: relative; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.photo-frame .avatar { border-radius: 50%; box-shadow: 0 0 0 4px var(--surface), 0 0 0 6px var(--blue-soft); font-size: 2.6rem !important; }
+.photo-edit { position: absolute; right: 4px; bottom: 4px; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--blue); color: #fff; box-shadow: 0 0 0 3px var(--surface); }
+.photo-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.photo-hint { margin: 0; font-size: 0.76rem; color: var(--ink-3); }
+/* Hero photo: show the building on the right with the NU crest */
+.hero-nu-photo { background: url('/nu-moa.jpg') right 0 top 14% / 58% auto no-repeat, linear-gradient(110deg, #0f2370, #1d3fb8); transform: none; }
+.hero-nu-shade { background: linear-gradient(90deg, #0a1648 0%, #0f2370 36%, #13319acc 48%, #1838a833 62%, transparent 78%), linear-gradient(0deg, #0a164880 0%, transparent 40%); }
+.profile-photo { position: relative; flex: none; padding: 0; border: 0; border-radius: 14px; background: none; cursor: pointer; }
+.profile-photo .avatar { border-radius: 14px; }
+.profile-photo span { position: absolute; right: -4px; bottom: -4px; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--blue); color: #fff; box-shadow: 0 0 0 2px var(--surface); }
+.hero-nu-photo { background-position: right -14px top 14%, 0 0; background-size: 60% auto, auto; }
