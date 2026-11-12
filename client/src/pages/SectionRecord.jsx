@@ -221,12 +221,13 @@ export default function SectionRecord() {
       >
         <div className="meta-pills">
           {schedule(section).map((x, i) => (
-            <span key={i} className="meta-pill">
-              <Icon name="calendar" size={14} />
-              {x.day}{x.time && ` · ${x.time}`}{x.room && ` · ${roomLabel(x.room, 'Room')}`}
+            <span key={i} className="sched-chip">
+              <b>{x.day}</b>
+              <span className="sched-chip-time">{x.time || 'Time not set'}</span>
+              {x.room && <em>{roomLabel(x.room, 'Room')}</em>}
             </span>
           ))}
-          {section.units != null && <span className="meta-pill"><Icon name="book" size={14} />{section.units} units</span>}
+          {section.units != null && <span className="sched-chip units"><b>{section.units}</b><span className="sched-chip-time">units</span></span>}
           {schedule(section).length === 0 && (
             <button className="meta-pill link-pill" onClick={() => setPanel('details')}><Icon name="plus" size={14} />Add schedule</button>
           )}
