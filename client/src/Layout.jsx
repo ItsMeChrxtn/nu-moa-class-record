@@ -13,12 +13,15 @@ const ADMIN_TABS = [
   { tab: 'activity', label: 'Activity', icon: 'list' },
 ];
 
-// The newest academic year + term's sections, for quick switching in the sidebar.
-function latestTerm(sections) {
-  const key = (s) => `${s.academicYear || ''}|${s.term || ''}`;
-  const newest = [...sections].sort((a, b) => (b.academicYear || '').localeCompare(a.academicYear || ''))[0];
-  return newest ? sections.filter((s) => key(s) === key(newest)).sort((a, b) => a.code.localeCompare(b.code)) : [];
-}
+const ayKey = (s) => (s.academicYear || '').trim();
+const ayLabel = (ay) => (ay ? `A.Y. ${ay.replace(/\s*-\s*/, ' - ')}` : 'No academic year');
+const readAy = () => {
+  try {
+    return localStorage.getItem('side-ay');
+  } catch {
+    return null;
+  }
+};
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -26,14 +29,31 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
-  const [sections, setSections] = useState([]);
+  const [sections, setSections] = useState([]); // every section of this faculty
+  const [ay, setAy] = useState(readAy); // academic year shown in the sidebar
   const ready = user && !user.mustChangePassword;
   const params = new URLSearchParams(location.search);
 
   useEffect(() => setOpen(false), [location.pathname, location.search]);
   useEffect(() => {
-    if (ready && user.role === 'faculty') api('/faculty/sections').then((d) => setSections(latestTerm(d.sections))).catch(() => {});
+    if (ready && user.role === 'faculty') api('/faculty/sections').then((d) => setSections(d.sections)).catch(() => {});
   }, [ready, user?.role, location.pathname]);
+
+  // Academic years, newest first; opening a section shows its year in the sidebar.
+  const years = [...new Set(sections.map(ayKey))].sort((a, b) => b.localeCompare(a));
+  const openId = location.pathname.match(/^\/faculty\/sections\/([^/]+)/)?.[1];
+  const openAy = openId ? sections.find((x) => x.id === openId) : null;
+  useEffect(() => {
+    if (openAy) setAy(ayKey(openAy));
+  }, [openAy]);
+  const shownAy = years.includes(ay) ? ay : years[0];
+  const listed = sections.filter((x) => ayKey(x) === shownAy).sort((a, b) => a.code.localeCompare(b.code));
+  const pickAy = (v) => {
+    setAy(v);
+    try {
+      localStorage.setItem('side-ay', v);
+    } catch {}
+  };
 
   async function doLogout() {
     const ok = await confirm({ title: 'Log out?', message: 'You will need your password to sign in again.', confirmLabel: 'Log out' });
@@ -63,8 +83,14 @@ export default function Layout() {
         {item('/faculty?view=schedule', 'calendar', 'Weekly schedule', onPath('/faculty') && view === 'schedule')}
         {sections.length > 0 && (
           <>
-            <span className="side-label">This term's sections</span>
-            {sections.map((s) => (
+            <span className="side-label">Sections</span>
+            <label className="side-ay">
+              <Icon name="calendar" size={15} />
+              <select value={shownAy} onChange={(e) => pickAy(e.target.value)} aria-label="Academic year">
+                {years.map((y) => <option key={y} value={y}>{ayLabel(y)}</option>)}
+              </select>
+            </label>
+            {listed.map((s) => (
               <NavLink key={s.id} to={`/faculty/sections/${s.id}`} className={({ isActive }) => `side-link side-sec ${isActive ? 'on' : ''}`}>
                 <b>{s.code}</b>
                 <span title={s.subjectTitle}>{titleCase(s.subjectTitle || s.subjectCode || '')}</span>

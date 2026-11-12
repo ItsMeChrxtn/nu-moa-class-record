@@ -98,71 +98,103 @@ const pct = (v) => (v == null ? '—' : `${v.toFixed(1)}%`);
 // Shades of blue for the grade donut (best = darkest), gold for failing.
 const DONUT_BLUES = ['#2f54eb', '#4f7cff', '#6f95ff', '#8fb0ff', '#adc5ff', '#c9d8ff', '#dfe8ff'];
 
-// All sections of one term as a table: code, subject, schedule, students, average, attendance, status.
-function SectionsTable({ group, colors, onDelete }) {
+// One term on a section card: class average (bar) and item count.
+function TermMeter({ label, items, average, state }) {
   return (
-    <section className="card dash-table">
-      <header className="dash-table-head">
-        <h3>{group.label} <span className="count-badge">{group.sections.length}</span></h3>
+    <div className={`term-step ${state}`} title={`${label}: ${items} item${items === 1 ? '' : 's'}${average != null ? `, class average ${average.toFixed(2)}%` : ''}`}>
+      <span className="term-step-top">
+        <span>{label}</span>
+        <strong>{average != null ? `${average.toFixed(1)}%` : state === 'later' ? 'Not yet' : '—'}</strong>
+      </span>
+      <span className="term-bar"><span style={{ width: `${Math.min(100, average || 0)}%` }} /></span>
+      <span className="term-step-sub">{items} item{items === 1 ? '' : 's'}</span>
+    </div>
+  );
+}
+
+function SectionCard({ s, color, onDelete }) {
+  return (
+    <Link to={`/faculty/sections/${s.id}`} className={`section-card sc-${color ?? 0}`}>
+      <div className="section-card-top">
+        <span className="code-badge">{s.code}</span>
+        <span className="card-tools">
+          <span className={`chip ${s.published ? 'ok' : ''}`}>
+            <span className="dot" />
+            {s.published ? 'Published' : 'Hidden'}
+          </span>
+          <button
+            className="icon-btn danger card-delete"
+            title={`Delete ${s.code}`}
+            aria-label={`Delete ${s.code}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            <Icon name="trash" size={15} />
+          </button>
+        </span>
+      </div>
+      <div>
+        <h3>{titleCase(s.subjectTitle || 'No subject title')}</h3>
+        <div className="section-sub">{s.subjectCode}{s.units ? ` · ${s.units} units` : ''}</div>
+      </div>
+      <div className="sched">
+        {schedule(s).map((x, j) => (
+          <div key={j} className="sched-row">
+            <Icon name="calendar" size={15} />
+            <span className="sched-day">{x.day}</span>
+            {x.time && <><Icon name="clock" size={15} /><span>{x.time}</span></>}
+            {x.room && <span className="sched-room">{roomLabel(x.room)}</span>}
+          </div>
+        ))}
+      </div>
+      {s.gradingMode === 'final' ? (
+        <div className="term-progress single">
+          <TermMeter label="Final only" items={s.itemCount} average={s.itemCount ? s.finalAverage : null} state="now" />
+        </div>
+      ) : (
+        <div className="term-progress">
+          <TermMeter label="Midterms" items={s.itemCount - (s.finalsItemCount || 0)} average={s.midtermAverage} state={s.finalsItemCount ? 'done' : 'now'} />
+          <TermMeter label="Finals" items={s.finalsItemCount || 0} average={s.finalsItemCount ? s.finalAverage : null} state={s.finalsItemCount ? 'now' : 'later'} />
+        </div>
+      )}
+      <div className="section-foot">
+        <div className="foot-stats">
+          <span className="foot-stat"><Icon name="users" size={15} /><strong>{s.studentCount}</strong> students</span>
+        </div>
+        <span className="card-tools">
+          <DownloadButton small className="btn card-export" url={`/api/faculty/export?section=${encodeURIComponent(s.id)}`} title={`Export the ${s.code} grading sheet (Excel)`}>
+            Excel
+          </DownloadButton>
+          <Icon name="chevronRight" className="go" />
+        </span>
+      </div>
+    </Link>
+  );
+}
+
+// One academic year + term: its export button, its section cards and a New Section card.
+function TermCards({ group, colors, onDelete, onNew }) {
+  return (
+    <section className="term-group">
+      <div className="section-title-row">
+        <h2>{group.label} <span className="count-badge">{group.sections.length}</span></h2>
         <DownloadButton
           url={`/api/faculty/export?${new URLSearchParams({ academicYear: group.academicYear, term: group.term })}`}
           title={`Excel grading sheet with the ${group.sections.length} section${group.sections.length === 1 ? '' : 's'} of ${group.label}`}
         >
           Export grading sheet
         </DownloadButton>
-      </header>
-      <div className="table-scroll">
-        <table className="dtable">
-          <thead>
-            <tr>
-              <th>Section</th>
-              <th className="num-col">Students</th>
-              <th className="num-col">Average</th>
-              <th className="num-col">Attendance</th>
-              <th>Status</th>
-              <th aria-label="Actions" />
-            </tr>
-          </thead>
-          <tbody>
-            {group.sections.map((s) => {
-              const avg = currentAvg(s);
-              return (
-                <tr key={s.id}>
-                  <td>
-                    <Link to={`/faculty/sections/${s.id}`} className="dt-sec">
-                      <span className={`dt-tile sc-${colors.get(s.id) ?? 0}`}>{s.code.slice(-3)}</span>
-                      <span>
-                        <strong>{s.code}</strong>
-                        <small>{titleCase(s.subjectTitle || s.subjectCode || 'No subject title')}</small>
-                        <small className="dt-when">
-                          {schedule(s).length ? schedule(s).map((x) => [x.day, x.time, x.room && roomLabel(x.room)].filter(Boolean).join(' ')).join('  ·  ') : 'No schedule yet'}
-                        </small>
-                      </span>
-                    </Link>
-                  </td>
-                  <td className="num-col">{s.studentCount}</td>
-                  <td className="num-col">
-                    <span className={avg != null && avg < 60 ? 'dt-low' : ''}>{pct(avg)}</span>
-                    <small className="dt-sub">{s.finalsItemCount || s.gradingMode === 'final' ? 'final' : 'midterm'}</small>
-                  </td>
-                  <td className="num-col">{s.attendanceRate == null ? '—' : `${s.attendanceRate}%`}</td>
-                  <td><span className={`pill ${s.published ? 'pill-on' : 'pill-off'}`}>{s.published ? 'Published' : 'Hidden'}</span></td>
-                  <td className="dt-actions">
-                    <DownloadButton small className="btn card-export" url={`/api/faculty/export?section=${encodeURIComponent(s.id)}`} title={`Export the ${s.code} grading sheet (Excel)`}>
-                      Excel
-                    </DownloadButton>
-                    <button className="icon-btn danger" title={`Delete ${s.code}`} aria-label={`Delete ${s.code}`} onClick={() => onDelete(s)}>
-                      <Icon name="trash" size={15} />
-                    </button>
-                    <Link to={`/faculty/sections/${s.id}`} className="icon-btn" title={`Open ${s.code}`} aria-label={`Open ${s.code}`}>
-                      <Icon name="chevronRight" size={16} />
-                    </Link>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      </div>
+      <div className="grid">
+        {group.sections.map((s) => <SectionCard key={s.id} s={s} color={colors.get(s.id)} onDelete={() => onDelete(s)} />)}
+        <button className="section-card add-card" onClick={() => onNew({ academicYear: group.academicYear, term: group.term })}>
+          <span className="add-icon"><Icon name="plus" size={20} /></span>
+          <strong>New Section</strong>
+          <span>{group.term || 'No term'} · A.Y. {group.academicYear.replace(/s*-s*/, ' - ') || '—'}</span>
+        </button>
       </div>
     </section>
   );
@@ -211,6 +243,21 @@ function DashCharts({ sections }) {
       </ChartCard>
     </div>
   );
+}
+
+// "2 classes today · next: INF241 at 1:00 PM · CL3", or what comes next this week.
+function todayLine(sections) {
+  const day = todayCode();
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const toMin = (t) => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null);
+  const today = sections.flatMap((s) => meetingsOn(s, day).map((m) => ({ ...m, s }))).sort((a, b) => (a.start || '99').localeCompare(b.start || '99'));
+  if (!today.length) return `No classes today · ${sections.length} section${sections.length === 1 ? '' : 's'} this term`;
+  const next = today.find((c) => toMin(c.end) == null || toMin(c.end) > mins);
+  const count = `${today.length} class${today.length === 1 ? '' : 'es'} today`;
+  if (!next) return `${count} · all done for the day`;
+  const live = toMin(next.start) != null && toMin(next.start) <= mins;
+  return [count, `${live ? 'now' : 'next'}: ${next.s.code}${next.time ? ` at ${next.time.split(' - ')[0]}` : ''}`, next.room && roomLabel(next.room)].filter(Boolean).join('  ·  ');
 }
 
 export default function FacultyHome() {
@@ -278,8 +325,8 @@ export default function FacultyHome() {
         <>
           <WelcomeBanner
             eyebrow={latest ? latest.label : 'Faculty'}
-            title={<>{greeting()}, <span className="accent">{firstName(user.name)}</span> 👋</>}
-            lead="Here's what's happening in your classes today."
+            title={<>{greeting()}, <span className="accent">{firstName(user.name)}</span></>}
+            lead={todayLine(current)}
             actions={newButton}
           />
 
@@ -304,7 +351,7 @@ export default function FacultyHome() {
 
               <div className="dash-split">
                 <div className="dash-tables">
-                  {groups.map((g) => <SectionsTable key={g.key} group={g} colors={colors} onDelete={remove} />)}
+                  {groups.map((g) => <TermCards key={g.key} group={g} colors={colors} onDelete={remove} onNew={setCreating} />)}
                 </div>
                 <TodayPanel sections={current} colors={colors} onOpenWeek={() => pick('schedule')} />
               </div>

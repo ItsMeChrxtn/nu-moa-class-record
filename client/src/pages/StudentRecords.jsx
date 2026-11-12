@@ -43,8 +43,8 @@ export default function StudentRecords() {
     <div className="container dash">
       <WelcomeBanner
         eyebrow={`Student · ${user.username}`}
-        title={<>Hello, <span className="accent">{firstName(user.name)}</span> 👋</>}
-        lead={records.length ? `You have ${records.length} class${records.length === 1 ? '' : 'es'} with published grades. Here is how you are doing.` : 'Your grades will appear here once your faculty publishes them.'}
+        title={<>Hello, <span className="accent">{firstName(user.name)}</span></>}
+        lead={records.length ? `${records.length} class${records.length === 1 ? '' : 'es'} with published grades` : 'Your grades will appear here once your faculty publishes them.'}
       />
       {records.length > 0 && (
         <>
