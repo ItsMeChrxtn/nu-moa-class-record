@@ -176,11 +176,15 @@ function SectionCard({ s, color, onDelete }) {
 }
 
 // One academic year + term: its export button, its section cards and a New Section card.
-function TermCards({ group, colors, onDelete, onNew }) {
+function TermCards({ group, colors, onDelete, onNew, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="term-group">
+    <section className={`term-group ${open ? 'open' : 'closed'}`}>
       <div className="section-title-row">
-        <h2>{group.label} <span className="count-badge">{group.sections.length}</span></h2>
+        <button type="button" className="term-toggle" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+          <Icon name="chevronDown" size={18} className="term-caret" />
+          <h2>{group.label} <span className="count-badge">{group.sections.length}</span></h2>
+        </button>
         <DownloadButton
           url={`/api/faculty/export?${new URLSearchParams({ academicYear: group.academicYear, term: group.term })}`}
           title={`Excel grading sheet with the ${group.sections.length} section${group.sections.length === 1 ? '' : 's'} of ${group.label}`}
@@ -188,6 +192,7 @@ function TermCards({ group, colors, onDelete, onNew }) {
           Export grading sheet
         </DownloadButton>
       </div>
+      {open && (
       <div className="grid">
         {group.sections.map((s) => <SectionCard key={s.id} s={s} color={colors.get(s.id)} onDelete={() => onDelete(s)} />)}
         <button className="section-card add-card" onClick={() => onNew({ academicYear: group.academicYear, term: group.term })}>
@@ -196,6 +201,7 @@ function TermCards({ group, colors, onDelete, onNew }) {
           <span>{group.term || 'No term'} · A.Y. {group.academicYear.replace(/s*-s*/, ' - ') || '—'}</span>
         </button>
       </div>
+      )}
     </section>
   );
 }
@@ -302,7 +308,8 @@ export default function FacultyHome() {
   // Sections page: the chosen academic year, newest by default.
   const years = [...new Set(groups.map((g) => g.academicYear.trim()))];
   const ay = years.includes(params.get('ay')) ? params.get('ay') : years[0];
-  const ayGroups = groups.filter((g) => g.academicYear.trim() === ay);
+  // Latest term first; it starts open, older terms start folded.
+  const ayGroups = groups.filter((g) => g.academicYear.trim() === ay).reverse();
 
   const remove = async (s) => {
     if (await deleteSection(s, { confirm, toast }, { students: s.studentCount, items: s.itemCount })) setSections((list) => list.filter((x) => x.id !== s.id));
@@ -332,7 +339,7 @@ export default function FacultyHome() {
               {newButton}
             </div>
           </div>
-          {ayGroups.map((g) => <TermCards key={g.key} group={g} colors={colors} onDelete={remove} onNew={setCreating} />)}
+          {ayGroups.map((g, i) => <TermCards key={g.key} group={g} colors={colors} onDelete={remove} onNew={setCreating} defaultOpen={i === 0} />)}
         </>
       ) : view === 'schedule' && sections.length > 0 ? (
         <>
