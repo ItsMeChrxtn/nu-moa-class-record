@@ -115,7 +115,7 @@ export function Avatar({ name, size = 36, photo }) {
 }
 
 // tone: blue | teal | amber | ink | red — the colour of the icon tile.
-export function Stat({ icon, label, value, sub, tone, trend }) {
+export function Stat({ icon, label, value, sub, tone, trend, meter }) {
   return (
     <div className={`stat ${tone ? `stat-tone tone-${tone}` : ''}`}>
       <div className="stat-top">
@@ -123,6 +123,7 @@ export function Stat({ icon, label, value, sub, tone, trend }) {
         {icon && (tone ? <span className="stat-icon"><Icon name={icon} size={18} /></span> : <Icon name={icon} size={16} />)}
       </div>
       <div className="stat-value">{value}</div>
+      {meter != null && <span className="stat-meter"><i style={{ width: `${Math.max(0, Math.min(100, meter))}%` }} /></span>}
       {(sub || trend) && (
         <div className="stat-sub">
           {trend && <span className={`stat-trend ${trend.dir || ''}`}>{trend.dir === 'down' ? '▼' : trend.dir === 'up' ? '▲' : ''} {trend.text}</span>}

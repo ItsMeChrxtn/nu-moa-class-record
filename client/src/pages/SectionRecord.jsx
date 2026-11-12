@@ -4,7 +4,7 @@ import { api, COMPONENTS, PERIODS, TERM_COMPONENTS, fmt, groupItems, roomLabel, 
 import { AddStudentsModal, ImportResultModal, deleteSection } from '../Roster.jsx';
 import { EditSectionModal } from '../SectionForm.jsx';
 import { ACCOUNT_LABEL, StudentAccountsModal } from '../StudentAccounts.jsx';
-import { BarRows, ChartCard, ChartEmpty, Line } from '../Charts.jsx';
+import { BarRows, ChartCard, ChartEmpty, Columns, Line } from '../Charts.jsx';
 import { AttendanceView } from '../Attendance.jsx';
 import { Avatar, DownloadButton, EmptyState, EqBadge, ErrorState, Hero, Icon, Menu, Modal, PageLoader, titleCase, useUI } from '../ui.jsx';
 
@@ -241,16 +241,20 @@ export default function SectionRecord() {
           </div>
           <div className="kpi">
             <span className="kpi-label"><Icon name={term === 'MID' ? 'chart' : 'award'} size={14} /> Class average · {TERM[term].name}</span>
-            <b className="kpi-value">{fmt(summary.avg)}<small>%</small></b>
+            {items.length ? <b className="kpi-value">{fmt(summary.avg)}<small>%</small></b> : <b className="kpi-value kpi-none">No scores yet</b>}
           </div>
           <div className="kpi">
             <span className="kpi-label"><Icon name="check" size={14} /> Passing · {TERM[term].name}</span>
-            <b className="kpi-value">{summary.passing}<small> / {data.rows.length}</small></b>
-            {data.rows.length > 0 && <span className="kpi-sub">{Math.round((summary.passing / data.rows.length) * 100)}%</span>}
+            {items.length ? (
+              <>
+                <b className="kpi-value">{summary.passing}<small> / {data.rows.length}</small></b>
+                {data.rows.length > 0 && <span className="kpi-sub">{Math.round((summary.passing / data.rows.length) * 100)}%</span>}
+              </>
+            ) : <b className="kpi-value kpi-none">—</b>}
           </div>
           <div className="kpi kpi-dist">
             <span className="kpi-label">Distribution · {TERM[term].gradeLabel}</span>
-            <div className="hist">
+            {!items.length ? <span className="kpi-empty">Grades show here once you add items and encode scores.</span> : <div className="hist">
               {summary.dist.map((d) => (
                 <div key={d.eq} className={`hist-col ${isFail(d.eq) ? 'fail' : ''} ${d.n ? '' : 'zero'}`} title={`${d.eq}: ${d.n} students`}>
                   <span className="hist-n">{d.n || ''}</span>
@@ -258,7 +262,7 @@ export default function SectionRecord() {
                   <span className="hist-label">{d.eq}</span>
                 </div>
               ))}
-            </div>
+            </div>}
           </div>
         </div>
 
@@ -268,11 +272,11 @@ export default function SectionRecord() {
               {insights.comps.some((c) => c.values[0] != null) ? (
                 <BarRows rows={insights.comps} series={['Class average']} threshold={60} thresholdLabel="60%" />
               ) : (
-                <ChartEmpty>Add items to see the averages.</ChartEmpty>
+                <ChartEmpty icon={<Icon name="chart" size={22} />} title="No items yet">Add a {TERM[term].name.toLowerCase()} item and the average per component shows here.</ChartEmpty>
               )}
             </ChartCard>
             <ChartCard title="Attendance per session" sub="Present or late, percent of the class">
-              {insights.trend.length ? <Line points={insights.trend} height={140} /> : <ChartEmpty>No attendance yet. Open the Attendance tab to take it.</ChartEmpty>}
+              {insights.trend.length > 6 ? <Line points={insights.trend} height={160} /> : insights.trend.length ? <Columns data={insights.trend.map((p) => ({ ...p, value: p.value ?? 0 }))} height={160} unit="%" /> : <ChartEmpty icon={<Icon name="calendar" size={22} />} title="No attendance yet" action={<button className="btn" onClick={() => setView('attendance')}>Take attendance</button>}>Open the Attendance tab to start the first session.</ChartEmpty>}
             </ChartCard>
           </div>
         )}

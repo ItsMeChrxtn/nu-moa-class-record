@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ChartCard, ChartEmpty, Donut, Line, RankList } from '../Charts.jsx';
+import { ChartCard, ChartEmpty, Columns, Donut, Line, RankList } from '../Charts.jsx';
 import { api, meetingsOn, roomLabel, schedule, todayCode } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { NewSectionModal, deleteSection } from '../Roster.jsx';
@@ -53,20 +53,25 @@ function TodayPanel({ sections, colors, onOpenWeek }) {
         <Icon name="calendar" size={20} />
       </div>
       {classes.length === 0 ? (
-        <p className="today-empty">Enjoy the free day. Your sections are below.</p>
+        <p className="today-empty">No classes today. Your week is below.</p>
       ) : (
-        <ol className="today-list">
+        <ol className="tl">
           {classes.map((c, i) => {
             const live = toMin(c.start) != null && toMin(c.start) <= mins && mins < toMin(c.end);
             const done = toMin(c.end) != null && toMin(c.end) <= mins;
+            const state = live ? 'now' : done ? 'done' : i === nextIdx ? 'next' : 'later';
+            const [from, to] = (c.time || '').split(' - ');
             return (
-              <li key={`${c.s.id}-${i}`} className={`sc-${colors.get(c.s.id) ?? 0} ${live ? 'live' : done ? 'done' : i === nextIdx ? 'next' : ''}`}>
-                <Link to={`/faculty/sections/${c.s.id}`}>
-                  <span className="today-time">{c.time || 'Time not set'}</span>
-                  <span className="today-code">{c.s.code}</span>
-                  <span className="today-subject">{titleCase(c.s.subjectTitle || c.s.subjectCode || '')}</span>
-                  <span className="today-room">{roomLabel(c.room)}</span>
-                  <span className="today-tag">{live ? 'Now' : done ? 'Done' : i === nextIdx ? 'Next' : ''}</span>
+              <li key={`${c.s.id}-${i}`} className={`tl-item is-${state}`}>
+                <span className="tl-time"><b>{from || '—'}</b><small>{to || ''}</small></span>
+                <span className="tl-dot" aria-hidden="true" />
+                <Link to={`/faculty/sections/${c.s.id}`} className="tl-card">
+                  <span className="tl-main">
+                    <strong>{c.s.code}</strong>
+                    <span>{titleCase(c.s.subjectTitle || c.s.subjectCode || '')}</span>
+                  </span>
+                  {c.room && <span className="tl-room">{roomLabel(c.room)}</span>}
+                  <span className={`tl-tag tag-${state}`}>{{ now: 'In class now', done: 'Done', next: 'Up next', later: 'Later' }[state]}</span>
                 </Link>
               </li>
             );
@@ -239,13 +244,13 @@ function DashCharts({ sections }) {
   return (
     <div className="dash-grid">
       <ChartCard className="dash-wide" title="Attendance trend" sub="Present or late, all sections, by class day">
-        {trend.length ? <Line points={trend} height={210} /> : <ChartEmpty>Take attendance in a section to see the trend.</ChartEmpty>}
+        {trend.length > 6 ? <Line points={trend} height={210} /> : trend.length ? <Columns data={trend.map((p) => ({ ...p, value: p.value ?? 0 }))} height={190} unit="%" /> : <ChartEmpty icon={<Icon name="calendar" size={22} />} title="No attendance yet" action={<Link className="btn" to="/faculty?view=sections">Open a section</Link>}>Take attendance in a section and the rate per class day shows here.</ChartEmpty>}
       </ChartCard>
       <ChartCard title="Grade distribution" sub={graded ? `${graded} students this term` : 'This term'}>
-        {graded ? <Donut parts={parts} center={graded} centerLabel="students" /> : <ChartEmpty>No grades yet.</ChartEmpty>}
+        {graded ? <Donut parts={parts} center={graded} centerLabel="students" /> : <ChartEmpty icon={<Icon name="award" size={22} />} title="No grades yet">The spread of grades appears once scores are encoded.</ChartEmpty>}
       </ChartCard>
       <ChartCard title="Top sections" sub="By class average">
-        {ranked.length ? <RankList items={ranked} /> : <ChartEmpty>Averages appear once a section has scores.</ChartEmpty>}
+        {ranked.length ? <RankList items={ranked} /> : <ChartEmpty icon={<Icon name="chart" size={22} />} title="No rankings yet">Sections are ranked by class average once they have scores.</ChartEmpty>}
       </ChartCard>
     </div>
   );
@@ -372,10 +377,10 @@ export default function FacultyHome() {
           ) : (
             <>
               <div className="kpi-row">
-                <Stat tone="blue" icon="layers" label="Sections" value={current.length} sub={`${published} published`} />
-                <Stat tone="gold" icon="users" label="Students" value={students} sub="this term" />
-                <Stat tone="blue" icon="chart" label="Class average" value={<>{termAverage == null ? '—' : termAverage.toFixed(1)}<small>%</small></>} sub={`${avgs.length} section${avgs.length === 1 ? '' : 's'} with scores`} />
-                <Stat tone="gold" icon="check" label="Attendance" value={<>{att.all ? Math.round((att.ok / att.all) * 1000) / 10 : '—'}<small>%</small></>} sub="present or late" />
+                <Stat tone="blue" icon="layers" label="Sections" value={current.length} meter={current.length ? (published / current.length) * 100 : 0} sub={published ? `${published} of ${current.length} visible to students` : 'None visible to students yet'} />
+                <Stat tone="gold" icon="users" label="Students" value={students} sub={`about ${current.length ? Math.round(students / current.length) : 0} per section`} />
+                <Stat tone="blue" icon="chart" label="Class average" value={termAverage == null ? <span className="stat-none">No scores yet</span> : <>{termAverage.toFixed(1)}<small>%</small></>} meter={termAverage ?? undefined} sub={avgs.length ? `${avgs.length} of ${current.length} sections with scores` : 'Add items in a section to start'} />
+                <Stat tone="gold" icon="check" label="Attendance" value={att.all ? <>{Math.round((att.ok / att.all) * 1000) / 10}<small>%</small></> : <span className="stat-none">Not taken yet</span>} meter={att.all ? (att.ok / att.all) * 100 : undefined} sub={att.all ? `${att.all - att.ok} absence${att.all - att.ok === 1 ? '' : 's'} recorded` : 'Take attendance in a section'} />
               </div>
 
               <DashCharts sections={current} />

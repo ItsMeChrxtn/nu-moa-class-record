@@ -62,15 +62,14 @@ export default function Profile() {
       />
       <div className="container lift">
         <form className="card narrow-card profile-card" onSubmit={submit}>
-          <div className="card-icon-head">
-            <button type="button" className="profile-photo" onClick={() => setPhotoOpen(true)} title="Change profile picture">
-              <Avatar name={form.name || saved.name} photo={user?.photo} size={56} />
-              <span><Icon name="upload" size={12} /></span>
+          <div className="profile-cover">
+            <button type="button" className="profile-photo big" onClick={() => setPhotoOpen(true)} title="Change profile picture">
+              <Avatar name={form.name || saved.name} photo={user?.photo} size={132} />
+              <span><Icon name="upload" size={16} /></span>
             </button>
-            <div>
-              <h2>My details</h2>
-              <p>{saved.email || saved.username}</p>
-            </div>
+            <h2>{titleCase(form.name || saved.name)}</h2>
+            <p>{saved.email || saved.username}</p>
+            <button type="button" className="link-add" onClick={() => setPhotoOpen(true)}>{user?.photo ? 'Change photo' : 'Add a photo'}</button>
           </div>
 
           <label className="field">

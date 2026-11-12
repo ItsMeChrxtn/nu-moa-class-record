@@ -43,8 +43,15 @@ export function ChartCard({ title, sub, legend, children, className = '', action
   );
 }
 
-export function ChartEmpty({ children }) {
-  return <div className="ch-empty">{children}</div>;
+export function ChartEmpty({ children, icon, title, action }) {
+  return (
+    <div className="ch-empty">
+      {icon && <span className="ch-empty-icon">{icon}</span>}
+      {title && <strong>{title}</strong>}
+      <span>{children}</span>
+      {action}
+    </div>
+  );
 }
 
 // Horizontal bars, one row per item; values: one number per series (null = no data yet).
