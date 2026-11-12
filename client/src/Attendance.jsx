@@ -25,6 +25,7 @@ export function AttendanceView({ sectionId, data, setData, query, setQuery }) {
   const [busy, setBusy] = useState(false);
   const [pick, setPick] = useState(null); // chosen session id; otherwise today's or the latest
   const [view, setView] = useState('roll'); // 'roll' | 'all'
+  const [editing, setEditing] = useState(null); // { id, date, period, label } while fixing a session
 
   const latest = sessions.find((s) => s.date === todayIso) || [...sessions].sort((a, b) => a.date.localeCompare(b.date)).at(-1);
   const current = sessions.find((s) => s.id === pick) || latest;
@@ -96,6 +97,13 @@ export function AttendanceView({ sectionId, data, setData, query, setQuery }) {
       if (pick === s.id) setPick(null);
       await run(api(`/faculty/sections/${sectionId}/attendance/sessions/${s.id}`, { method: 'DELETE' }), 'Session deleted');
     }
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    const { id, date, period, label } = editing;
+    const ok = await run(api(`/faculty/sections/${sectionId}/attendance/sessions/${id}`, { method: 'PATCH', body: { date, period, label: label.trim() } }), 'Session updated');
+    if (ok) setEditing(null);
   }
 
   const markEveryone = (s, mark) =>
@@ -183,6 +191,9 @@ export function AttendanceView({ sectionId, data, setData, query, setQuery }) {
                   </span>
                   <span className="att-sess-n">{k.A ? <span className="abs">{k.A} absent</span> : 'all in'}</span>
                 </button>
+                <button type="button" className="att-sess-del" title={`Delete the ${fmtDate(s.date)} session`} aria-label={`Delete the ${fmtDate(s.date)} session`} onClick={() => removeSession(s)}>
+                  <Icon name="trash" size={14} />
+                </button>
               </li>
             );
           })}
@@ -246,9 +257,24 @@ export function AttendanceView({ sectionId, data, setData, query, setQuery }) {
               </div>
               <div className="att-day-actions">
                 <button className="btn" onClick={() => markEveryone(current, 'P')}><Icon name="check" size={15} /> All present</button>
-                <button className="icon-btn danger" title="Delete this session" onClick={() => removeSession(current)}><Icon name="trash" size={16} /></button>
+                <button className="btn" onClick={() => setEditing({ id: current.id, date: current.date, period: current.period, label: current.label || '' })}><Icon name="edit" size={15} /> Edit</button>
+                <button className="btn att-del" onClick={() => removeSession(current)}><Icon name="trash" size={15} /> Delete session</button>
               </div>
             </div>
+            {editing?.id === current.id && (
+              <form className="att-edit" onSubmit={saveEdit}>
+                <strong>Fix this session</strong>
+                <input type="date" value={editing.date} onChange={(e) => setEditing({ ...editing, date: e.target.value })} required aria-label="Date" />
+                <div className="segmented">
+                  {[['MID', 'Midterms'], ['POST', 'Finals']].map(([k, label]) => (
+                    <button key={k} type="button" className={editing.period === k ? 'active' : ''} onClick={() => setEditing({ ...editing, period: k })}>{label}</button>
+                  ))}
+                </div>
+                <input value={editing.label} onChange={(e) => setEditing({ ...editing, label: e.target.value })} placeholder="Label (optional)" maxLength={40} aria-label="Label" />
+                <button type="button" className="btn" onClick={() => setEditing(null)}>Cancel</button>
+                <button className="btn primary">Save</button>
+              </form>
+            )}
 
             <div className="roll">
               {rows.map((r) => {
@@ -269,9 +295,16 @@ export function AttendanceView({ sectionId, data, setData, query, setQuery }) {
                         </button>
                       ))}
                     </div>
-                    <button type="button" className={`roll-exc ${mark === 'E' ? 'on' : ''}`} onClick={() => setMark(r, current, mark === 'E' ? 'P' : 'E')}>
-                      {mark === 'E' ? 'Excused ✓' : 'Excused'}
-                    </button>
+                    <span className="roll-extra">
+                      <button type="button" className={`roll-exc ${mark === 'E' ? 'on' : ''}`} onClick={() => setMark(r, current, mark === 'E' ? 'P' : 'E')}>
+                        {mark === 'E' ? 'Excused ✓' : 'Excused'}
+                      </button>
+                      {mark && (
+                        <button type="button" className="roll-exc roll-clear" title="Remove this mark" onClick={() => setMark(r, current, null)}>
+                          Clear
+                        </button>
+                      )}
+                    </span>
                   </div>
                 );
               })}

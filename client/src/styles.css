@@ -2386,3 +2386,21 @@ code, kbd { background: var(--surface-2); border-color: var(--line-2); color: va
 .kpi-empty { display: block; padding-top: 6px; font-size: 0.8rem; color: var(--ink-3); }
 .kpi:first-child .kpi-value { color: var(--blue); }
 @media (max-width: 680px) { .hero-compact .hero-inner { padding: 18px; } }
+/* Attendance: fix mistakes */
+.att-sessions li { position: relative; }
+.att-sess { padding-right: 34px; }
+.att-sess-del { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-3); opacity: 0.55; cursor: pointer; transition: opacity 0.12s, background 0.12s, color 0.12s; }
+.att-sessions li:hover .att-sess-del, .att-sess-del:focus-visible { opacity: 1; }
+.att-sess-del:hover { background: var(--red-soft); color: var(--red-ink); }
+.btn.att-del { color: var(--red-ink); border-color: #f2c4ca; }
+.btn.att-del:not(:disabled):hover { background: var(--red-soft); border-color: var(--red); color: var(--red-ink); }
+.att-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--gold-soft); }
+.att-edit strong { margin-right: 4px; font-size: 0.86rem; }
+.att-edit input[type='date'] { width: 160px; height: 36px; }
+.att-edit input:not([type]) { width: 200px; height: 36px; }
+.att-edit .segmented button { height: 36px; padding: 0 12px; }
+.att-edit .btn { height: 36px; }
+.roll-extra { grid-area: exc; justify-self: end; display: inline-flex; gap: 10px; }
+.roll-extra .roll-exc { grid-area: auto; }
+.roll-clear:hover { color: var(--red-ink); }
+@media (hover: none) { .att-sess-del { opacity: 1; } }
