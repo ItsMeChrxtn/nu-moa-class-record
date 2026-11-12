@@ -270,9 +270,9 @@ export default function FacultyHome() {
   const [blocks, setBlocks] = useState([]);
   const [workHours, setWorkHours] = useState(undefined);
   const [reporting, setReporting] = useState(false);
-  // Dashboard or weekly schedule, chosen in the sidebar (?view=schedule).
+  // Dashboard, sections of one academic year (?view=sections&ay=…) or the weekly schedule (?view=schedule).
   const [params, setParams] = useSearchParams();
-  const view = params.get('view') === 'schedule' ? 'schedule' : 'sections';
+  const view = ['schedule', 'sections'].includes(params.get('view')) ? params.get('view') : 'dashboard';
   const pick = (v) => setParams(v === 'schedule' ? { view: 'schedule' } : {});
 
   useEffect(() => {
@@ -299,6 +299,10 @@ export default function FacultyHome() {
   const termAverage = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : null;
   const att = current.reduce((a, s) => { for (const d of s.attendanceByDate || []) { a.ok += d.ok; a.all += d.all; } return a; }, { ok: 0, all: 0 });
   const colors = sectionColors(sections);
+  // Sections page: the chosen academic year, newest by default.
+  const years = [...new Set(groups.map((g) => g.academicYear.trim()))];
+  const ay = years.includes(params.get('ay')) ? params.get('ay') : years[0];
+  const ayGroups = groups.filter((g) => g.academicYear.trim() === ay);
 
   const remove = async (s) => {
     if (await deleteSection(s, { confirm, toast }, { students: s.studentCount, items: s.itemCount })) setSections((list) => list.filter((x) => x.id !== s.id));
@@ -311,7 +315,26 @@ export default function FacultyHome() {
 
   return (
     <div className="container dash">
-      {view === 'schedule' && sections.length > 0 ? (
+      {view === 'sections' && sections.length > 0 ? (
+        <>
+          <div className="page-head">
+            <div>
+              <p className="eyebrow">Sections</p>
+              <h1>{ay ? `Academic Year ${ay.replace(/s*-s*/, ' - ')}` : 'No academic year'}</h1>
+            </div>
+            <div className="page-head-actions">
+              <label className="ay-pick">
+                <Icon name="calendar" size={15} />
+                <select value={ay} onChange={(e) => setParams({ view: 'sections', ay: e.target.value })} aria-label="Academic year">
+                  {years.map((y) => <option key={y} value={y}>{y ? `A.Y. ${y.replace(/s*-s*/, ' - ')}` : 'No academic year'}</option>)}
+                </select>
+              </label>
+              {newButton}
+            </div>
+          </div>
+          {ayGroups.map((g) => <TermCards key={g.key} group={g} colors={colors} onDelete={remove} onNew={setCreating} />)}
+        </>
+      ) : view === 'schedule' && sections.length > 0 ? (
         <>
           <div className="page-head">
             <div>
@@ -349,12 +372,7 @@ export default function FacultyHome() {
 
               <DashCharts sections={current} />
 
-              <div className="dash-split">
-                <div className="dash-tables">
-                  {groups.map((g) => <TermCards key={g.key} group={g} colors={colors} onDelete={remove} onNew={setCreating} />)}
-                </div>
-                <TodayPanel sections={current} colors={colors} onOpenWeek={() => pick('schedule')} />
-              </div>
+              <TodayPanel sections={current} colors={colors} onOpenWeek={() => pick('schedule')} />
             </>
           )}
         </>

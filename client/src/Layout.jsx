@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api } from './api.js';
 import { useAuth } from './auth.jsx';
 import NotificationBell from './Notifications.jsx';
@@ -15,14 +15,6 @@ const ADMIN_TABS = [
 
 const ayKey = (s) => (s.academicYear || '').trim();
 const ayLabel = (ay) => (ay ? `A.Y. ${ay.replace(/\s*-\s*/, ' - ')}` : 'No academic year');
-const readAy = () => {
-  try {
-    return localStorage.getItem('side-ay');
-  } catch {
-    return null;
-  }
-};
-
 export default function Layout() {
   const { user, logout } = useAuth();
   const { confirm, toast } = useUI();
@@ -30,7 +22,7 @@ export default function Layout() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const [sections, setSections] = useState([]); // every section of this faculty
-  const [ay, setAy] = useState(readAy); // academic year shown in the sidebar
+  const [secOpen, setSecOpen] = useState(true); // Sections dropdown in the sidebar
   const ready = user && !user.mustChangePassword;
   const params = new URLSearchParams(location.search);
 
@@ -39,21 +31,10 @@ export default function Layout() {
     if (ready && user.role === 'faculty') api('/faculty/sections').then((d) => setSections(d.sections)).catch(() => {});
   }, [ready, user?.role, location.pathname]);
 
-  // Academic years, newest first; opening a section shows its year in the sidebar.
+  // Academic years, newest first, for the Sections dropdown.
   const years = [...new Set(sections.map(ayKey))].sort((a, b) => b.localeCompare(a));
   const openId = location.pathname.match(/^\/faculty\/sections\/([^/]+)/)?.[1];
-  const openAy = openId ? sections.find((x) => x.id === openId) : null;
-  useEffect(() => {
-    if (openAy) setAy(ayKey(openAy));
-  }, [openAy]);
-  const shownAy = years.includes(ay) ? ay : years[0];
-  const listed = sections.filter((x) => ayKey(x) === shownAy).sort((a, b) => a.code.localeCompare(b.code));
-  const pickAy = (v) => {
-    setAy(v);
-    try {
-      localStorage.setItem('side-ay', v);
-    } catch {}
-  };
+  const openAy = openId ? ayKey(sections.find((x) => x.id === openId) || {}) : null;
 
   async function doLogout() {
     const ok = await confirm({ title: 'Log out?', message: 'You will need your password to sign in again.', confirmLabel: 'Log out' });
@@ -79,25 +60,30 @@ export default function Layout() {
     nav = (
       <>
         <span className="side-label">Workspace</span>
-        {item('/faculty', 'layers', 'Dashboard', onPath('/faculty') && view !== 'schedule')}
-        {item('/faculty?view=schedule', 'calendar', 'Weekly schedule', onPath('/faculty') && view === 'schedule')}
-        {sections.length > 0 && (
-          <>
-            <span className="side-label">Sections</span>
-            <label className="side-ay">
-              <Icon name="calendar" size={15} />
-              <select value={shownAy} onChange={(e) => pickAy(e.target.value)} aria-label="Academic year">
-                {years.map((y) => <option key={y} value={y}>{ayLabel(y)}</option>)}
-              </select>
-            </label>
-            {listed.map((s) => (
-              <NavLink key={s.id} to={`/faculty/sections/${s.id}`} className={({ isActive }) => `side-link side-sec ${isActive ? 'on' : ''}`}>
-                <b>{s.code}</b>
-                <span title={s.subjectTitle}>{titleCase(s.subjectTitle || s.subjectCode || '')}</span>
-              </NavLink>
-            ))}
-          </>
+        {item('/faculty', 'layers', 'Dashboard', onPath('/faculty') && !view)}
+        {years.length > 0 && (
+          <div className={`side-group ${secOpen ? 'open' : ''}`}>
+            <button type="button" className={`side-link side-drop ${view === 'sections' || openId ? 'in' : ''}`} onClick={() => setSecOpen((v) => !v)} aria-expanded={secOpen}>
+              <Icon name="book" size={17} />
+              <span>Sections</span>
+              <Icon name="chevronDown" size={15} className="side-caret" />
+            </button>
+            {secOpen && (
+              <div className="side-sub">
+                {years.map((y) => {
+                  const on = (onPath('/faculty') && view === 'sections' && (params.get('ay') || years[0]) === y) || openAy === y;
+                  return (
+                    <Link key={y || 'none'} to={`/faculty?${new URLSearchParams({ view: 'sections', ay: y })}`} className={`side-sublink ${on ? 'on' : ''}`}>
+                      {ayLabel(y)}
+                      <small>{sections.filter((x) => ayKey(x) === y).length}</small>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
+        {item('/faculty?view=schedule', 'calendar', 'Weekly schedule', onPath('/faculty') && view === 'schedule')}
         <span className="side-label">Account</span>
         {item('/faculty/profile', 'user', 'My profile', onPath('/faculty/profile'))}
       </>

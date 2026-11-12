@@ -133,6 +133,46 @@ export function Stat({ icon, label, value, sub, tone, trend }) {
   );
 }
 
+// NU MOA building, drawn: a glass facade of hexagon windows with the crest at the top.
+function CampusArt() {
+  const hexes = [];
+  const r = 11; // hexagon radius
+  const w = Math.sqrt(3) * r;
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 9; col++) {
+      const x = 34 + col * w + (row % 2 ? w / 2 : 0);
+      const y = 40 + row * r * 1.5;
+      if (row === 0 && (col === 4 || col === 3)) continue; // room for the crest
+      const pts = [0, 1, 2, 3, 4, 5].map((i) => {
+        const t = (Math.PI / 3) * i - Math.PI / 2;
+        return `${(x + (r - 1.6) * Math.cos(t)).toFixed(1)},${(y + (r - 1.6) * Math.sin(t)).toFixed(1)}`;
+      });
+      const lit = (row * 7 + col * 3) % 11 === 0;
+      hexes.push(<polygon key={`${row}-${col}`} points={pts.join(' ')} className={lit ? 'cb-lit' : row > 5 ? 'cb-low' : 'cb-glass'} />);
+    }
+  }
+  return (
+    <svg className="campus-art" viewBox="0 0 220 160" role="img" aria-label="NU MOA campus building">
+      <defs>
+        <linearGradient id="cb-sky" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#ffffff" stopOpacity="0.16" /><stop offset="1" stopColor="#ffffff" stopOpacity="0" /></linearGradient>
+        <clipPath id="cb-clip"><rect x="22" y="22" width="176" height="122" rx="16" /></clipPath>
+      </defs>
+      <rect x="22" y="22" width="176" height="122" rx="16" fill="#f4f7ff" />
+      <g clipPath="url(#cb-clip)">{hexes}</g>
+      <rect x="22" y="22" width="176" height="122" rx="16" fill="url(#cb-sky)" />
+      <g transform="translate(110 34)">
+        <polygon points="0,-13 11.3,-6.5 11.3,6.5 0,13 -11.3,6.5 -11.3,-6.5" fill="#ffffff" stroke="#f5b100" strokeWidth="2" />
+        <path d="M-5 -5 h10 v6 c0 4 -5 6 -5 6 c0 0 -5 -2 -5 -6z" fill="#2447c7" />
+        <path d="M-2.5 -2 h5" stroke="#f5b100" strokeWidth="1.6" strokeLinecap="round" />
+      </g>
+      <rect x="10" y="142" width="200" height="6" rx="3" fill="#ffffff" fillOpacity="0.22" />
+      <rect x="92" y="128" width="36" height="16" rx="3" fill="#1b3486" />
+      <path d="M6 148 q10 -14 22 -2 q8 -12 18 2z" fill="#f5b100" fillOpacity="0.85" />
+      <path d="M176 148 q10 -16 24 0 q6 -8 14 0z" fill="#f5b100" fillOpacity="0.7" />
+    </svg>
+  );
+}
+
 // Dashboard welcome card: greeting and a real summary on the left, today's date on the right.
 export function WelcomeBanner({ eyebrow, title, lead, actions, aside }) {
   const d = new Date();
@@ -144,13 +184,7 @@ export function WelcomeBanner({ eyebrow, title, lead, actions, aside }) {
         {lead && <p className="welcome-lead">{lead}</p>}
         {actions && <div className="welcome-actions">{actions}</div>}
       </div>
-      {aside ?? (
-        <div className="welcome-date" aria-label={d.toDateString()}>
-          <span className="wd-month">{d.toLocaleDateString(undefined, { month: 'short' })}</span>
-          <span className="wd-day">{d.getDate()}</span>
-          <span className="wd-week">{d.toLocaleDateString(undefined, { weekday: 'long' })}</span>
-        </div>
-      )}
+      {aside ?? <div className="campus-photo" role="img" aria-label="NU MOA campus building" />}
     </section>
   );
 }

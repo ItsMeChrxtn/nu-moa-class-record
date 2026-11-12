@@ -2175,3 +2175,30 @@ code, kbd { background: var(--surface-2); border-color: var(--line-2); color: va
 .wd-day { font-size: 2.1rem; font-weight: 800; line-height: 1; letter-spacing: -0.03em; color: #1b3486; }
 .wd-week { margin-top: 4px; font-size: 0.72rem; font-weight: 600; color: var(--ink-3); }
 @media (max-width: 560px) { .welcome-date { display: none; } }
+.side-group { display: grid; gap: 2px; }
+.side-drop { width: 100%; border: 0; background: none; text-align: left; font: inherit; font-size: 0.88rem; cursor: pointer; }
+.side-drop.in { color: var(--ink); }
+.side-drop.in > .icon:first-child { color: var(--blue); }
+.side-caret { margin-left: auto; transition: transform 0.15s; }
+.side-group.open .side-caret { transform: rotate(180deg); }
+.side-sub { display: grid; gap: 2px; margin: 2px 0 4px 20px; padding-left: 12px; border-left: 1px solid var(--line); }
+.side-sublink { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 0.84rem; font-weight: 500; color: var(--ink-2); text-decoration: none; }
+.side-sublink small { min-width: 22px; padding: 1px 6px; border-radius: 6px; text-align: center; font-size: 0.7rem; font-weight: 700; background: var(--surface-3); color: var(--ink-2); }
+.side-sublink:hover { background: #0f17330a; color: var(--ink); }
+.side-sublink.on { background: var(--blue-soft); color: var(--blue); font-weight: 700; }
+.side-sublink.on small { background: var(--blue); color: #fff; }
+.page-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ay-pick { position: relative; display: flex; align-items: center; }
+.ay-pick .icon { position: absolute; left: 12px; color: var(--blue); pointer-events: none; }
+.ay-pick select { height: 42px; padding: 0 32px 0 36px; border-radius: 10px; font-weight: 600; font-size: 0.86rem; cursor: pointer; }
+.campus-art { position: relative; z-index: 1; flex: none; width: 230px; height: 167px; margin: -14px -6px -18px 0; filter: drop-shadow(0 10px 18px #0b1a5a66); }
+.cb-glass { fill: #3b62e0; stroke: #ffffff; stroke-width: 1.2; }
+.cb-low { fill: #e9eefc; stroke: #ffffff; stroke-width: 1.2; }
+.cb-lit { fill: #ffcf4a; stroke: #ffffff; stroke-width: 1.2; }
+@media (max-width: 760px) { .campus-art { display: none; } }
+/* NU MOA building photo on the right of the welcome banner, fading into the blue */
+.welcome { min-height: 190px; }
+.campus-photo { position: absolute; top: 0; right: 0; bottom: 0; width: min(46%, 560px); background: url('/nu-moa.jpg') center 22% / cover no-repeat; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 38%); mask-image: linear-gradient(90deg, transparent 0%, #000 38%); }
+.welcome-text { max-width: 58%; }
+@media (max-width: 760px) { .campus-photo { width: 100%; opacity: 0.22; -webkit-mask-image: none; mask-image: none; } .welcome-text { max-width: none; } }
+.campus-photo { background-position: 22% 2%; background-size: 118% auto; }
