@@ -3,7 +3,7 @@
 import { useId, useRef, useState } from 'react';
 
 // Series colours, in fixed order (validated for colour-blind separation; amber always gets a text label).
-export const SERIES = ['var(--blue)', 'var(--teal)', 'var(--amber)'];
+export const SERIES = ['var(--c1)', 'var(--c2)', 'var(--c3)'];
 
 function useTip() {
   const box = useRef(null);
@@ -220,4 +220,76 @@ function niceTicks(max) {
   for (let v = 0; v <= max + step - 1 && out.length < 7; v += step) out.push(v);
   if (out[out.length - 1] < max) out.push(out[out.length - 1] + step);
   return out;
+}
+
+// Part-to-whole ring with the total in the middle and a legend with percentages.
+// parts: [{ label, value, color }]
+export function Donut({ parts, center, centerLabel, size = 150 }) {
+  const t = useTip();
+  const total = parts.reduce((a, p) => a + p.value, 0);
+  const r = 15.9;
+  const C = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <div className="ch-donut" ref={t.box} onMouseLeave={t.hide}>
+      <svg viewBox="0 0 42 42" width={size} height={size} role="img" aria-label={`${centerLabel}: ${center}`}>
+        <circle cx="21" cy="21" r={r} fill="none" className="ch-donut-track" strokeWidth="5.2" />
+        {total > 0 &&
+          parts.map((p) => {
+            if (!p.value) return null;
+            const len = (p.value / total) * C;
+            const gap = parts.filter((x) => x.value).length > 1 ? 0.6 : 0;
+            const el = (
+              <circle
+                key={p.label}
+                cx="21"
+                cy="21"
+                r={r}
+                fill="none"
+                stroke={p.color}
+                strokeWidth="5.2"
+                strokeDasharray={`${Math.max(0, len - gap)} ${C}`}
+                strokeDashoffset={-offset}
+                transform="rotate(-90 21 21)"
+                onMouseMove={(e) => t.show(e, <><strong>{p.label}</strong><span className="ch-tip-line">{p.value} · {Math.round((p.value / total) * 100)}%</span></>)}
+              />
+            );
+            offset += len;
+            return el;
+          })}
+        <text x="21" y="21" textAnchor="middle" className="ch-donut-num">{center}</text>
+        <text x="21" y="26.5" textAnchor="middle" className="ch-donut-sub">{centerLabel}</text>
+      </svg>
+      <ul className="ch-donut-legend">
+        {parts.map((p) => (
+          <li key={p.label}>
+            <i style={{ background: p.color }} />
+            <span>{p.label}</span>
+            <b>{total ? Math.round((p.value / total) * 100) : 0}%</b>
+          </li>
+        ))}
+      </ul>
+      {t.node}
+    </div>
+  );
+}
+
+// Ranked list: a code tile, title, sub line, value and a thin bar.
+// items: [{ key, code, title, sub, value (0–max), label, to? }]
+export function RankList({ items, max = 100 }) {
+  return (
+    <ol className="ch-rank">
+      {items.map((it, i) => (
+        <li key={it.key}>
+          <span className={`ch-rank-tile ${i === 0 ? 'first' : ''}`}>{it.code}</span>
+          <span className="ch-rank-text">
+            <strong title={it.title}>{it.title}</strong>
+            <small>{it.sub}</small>
+            <span className="ch-rank-bar"><i style={{ width: `${it.value == null ? 0 : Math.min(100, (it.value / max) * 100)}%` }} /></span>
+          </span>
+          <b className="ch-rank-val">{it.label}</b>
+        </li>
+      ))}
+    </ol>
+  );
 }

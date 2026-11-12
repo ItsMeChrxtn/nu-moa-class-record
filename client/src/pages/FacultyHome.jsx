@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { BarRows, ChartCard, ChartEmpty, Columns } from '../Charts.jsx';
+import { ChartCard, ChartEmpty, Donut, Line, RankList } from '../Charts.jsx';
 import { api, meetingsOn, roomLabel, schedule, todayCode } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { NewSectionModal, deleteSection } from '../Roster.jsx';
 import Timetable, { LoadingReportModal, sectionColors } from '../Timetable.jsx';
-import { DownloadButton, EmptyState, ErrorState, Hero, Icon, PageLoader, Stat, TodayChip, firstName, greeting, titleCase, useUI } from '../ui.jsx';
+import { DownloadButton, EmptyState, ErrorState, Icon, PageLoader, Stat, WelcomeBanner, firstName, greeting, titleCase, useUI } from '../ui.jsx';
 
 const TERM_ORDER = ['first', 'second', 'third', 'summer'];
 const termRank = (t) => {
@@ -30,20 +30,6 @@ function termGroups(sections) {
   return [...map.values()]
     .sort((a, b) => b.academicYear.localeCompare(a.academicYear) || termRank(a.term) - termRank(b.term))
     .map((g) => ({ ...g, sections: g.sections.sort((a, b) => a.code.localeCompare(b.code)) }));
-}
-
-// One term on a section card: class average (bar) and item count.
-function TermMeter({ label, items, average, state }) {
-  return (
-    <div className={`term-step ${state}`} title={`${label}: ${items} item${items === 1 ? '' : 's'}${average != null ? `, class average ${average.toFixed(2)}%` : ''}`}>
-      <span className="term-step-top">
-        <span>{label}</span>
-        <strong>{average != null ? `${average.toFixed(1)}%` : state === 'later' ? 'Not yet' : '—'}</strong>
-      </span>
-      <span className="term-bar"><span style={{ width: `${Math.min(100, average || 0)}%` }} /></span>
-      <span className="term-step-sub">{items} item{items === 1 ? '' : 's'}</span>
-    </div>
-  );
 }
 
 // Classes that meet today, earliest first, with the one in progress or up next marked.
@@ -103,110 +89,125 @@ function TodayPanel({ sections, colors, onOpenWeek }) {
   );
 }
 
-function SectionCard({ s, color, onDelete }) {
-  return (
-    <Link to={`/faculty/sections/${s.id}`} className={`section-card sc-${color ?? 0}`}>
-      <div className="section-card-top">
-        <span className="code-badge">{s.code}</span>
-        <span className="card-tools">
-          <span className={`chip ${s.published ? 'ok' : ''}`}>
-            <span className="dot" />
-            {s.published ? 'Published' : 'Hidden'}
-          </span>
-          <button
-            className="icon-btn danger card-delete"
-            title={`Delete ${s.code}`}
-            aria-label={`Delete ${s.code}`}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onDelete();
-            }}
-          >
-            <Icon name="trash" size={15} />
-          </button>
-        </span>
-      </div>
-      <div>
-        <h3>{titleCase(s.subjectTitle || 'No subject title')}</h3>
-        <div className="section-sub">{s.subjectCode}{s.units ? ` · ${s.units} units` : ''}</div>
-      </div>
-      <div className="sched">
-        {schedule(s).map((x, j) => (
-          <div key={j} className="sched-row">
-            <Icon name="calendar" size={15} />
-            <span className="sched-day">{x.day}</span>
-            {x.time && <><Icon name="clock" size={15} /><span>{x.time}</span></>}
-            {x.room && <span className="sched-room">{roomLabel(x.room)}</span>}
-          </div>
-        ))}
-      </div>
-      {s.gradingMode === 'final' ? (
-        <div className="term-progress single">
-          <TermMeter label="Final only" items={s.itemCount} average={s.itemCount ? s.finalAverage : null} state="now" />
-        </div>
-      ) : (
-        <div className="term-progress">
-          <TermMeter label="Midterms" items={s.itemCount - (s.finalsItemCount || 0)} average={s.midtermAverage} state={s.finalsItemCount ? 'done' : 'now'} />
-          <TermMeter label="Finals" items={s.finalsItemCount || 0} average={s.finalsItemCount ? s.finalAverage : null} state={s.finalsItemCount ? 'now' : 'later'} />
-        </div>
-      )}
-      <div className="section-foot">
-        <div className="foot-stats">
-          <span className="foot-stat"><Icon name="users" size={15} /><strong>{s.studentCount}</strong> students</span>
-        </div>
-        <span className="card-tools">
-          <DownloadButton small className="btn card-export" url={`/api/faculty/export?section=${encodeURIComponent(s.id)}`} title={`Export the ${s.code} grading sheet (Excel)`}>
-            Excel
-          </DownloadButton>
-          <Icon name="chevronRight" className="go" />
-        </span>
-      </div>
-    </Link>
-  );
-}
-
 // Equivalents from best to worst (4.0 … 1.0, then R); pass/fail scales after.
 const eqRank = (eq) => (eq === 'R' || eq === 'Repeat' ? -1 : Number.isFinite(Number(eq)) ? Number(eq) : -0.5);
 const isFail = (eq) => eq === 'R' || eq === 'Repeat' || eq === 'F' || eq === 'Failed';
+// The grade that matters now: the final once Finals has items, the midterm before.
+const currentAvg = (s) => (s.finalsItemCount || s.gradingMode === 'final' ? s.finalAverage : s.midtermAverage);
+const pct = (v) => (v == null ? '—' : `${v.toFixed(1)}%`);
+// Shades of blue for the grade donut (best = darkest), gold for failing.
+const DONUT_BLUES = ['#2f54eb', '#4f7cff', '#6f95ff', '#8fb0ff', '#adc5ff', '#c9d8ff', '#dfe8ff'];
 
-// The latest term at a glance: averages, grade spread and attendance per section.
-function DashCharts({ sections, term }) {
-  const withGrades = sections.filter((s) => s.midtermAverage != null || s.finalAverage != null);
+// All sections of one term as a table: code, subject, schedule, students, average, attendance, status.
+function SectionsTable({ group, colors, onDelete }) {
+  return (
+    <section className="card dash-table">
+      <header className="dash-table-head">
+        <h3>{group.label} <span className="count-badge">{group.sections.length}</span></h3>
+        <DownloadButton
+          url={`/api/faculty/export?${new URLSearchParams({ academicYear: group.academicYear, term: group.term })}`}
+          title={`Excel grading sheet with the ${group.sections.length} section${group.sections.length === 1 ? '' : 's'} of ${group.label}`}
+        >
+          Export grading sheet
+        </DownloadButton>
+      </header>
+      <div className="table-scroll">
+        <table className="dtable">
+          <thead>
+            <tr>
+              <th>Section</th>
+              <th className="num-col">Students</th>
+              <th className="num-col">Average</th>
+              <th className="num-col">Attendance</th>
+              <th>Status</th>
+              <th aria-label="Actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {group.sections.map((s) => {
+              const avg = currentAvg(s);
+              return (
+                <tr key={s.id}>
+                  <td>
+                    <Link to={`/faculty/sections/${s.id}`} className="dt-sec">
+                      <span className={`dt-tile sc-${colors.get(s.id) ?? 0}`}>{s.code.slice(-3)}</span>
+                      <span>
+                        <strong>{s.code}</strong>
+                        <small>{titleCase(s.subjectTitle || s.subjectCode || 'No subject title')}</small>
+                        <small className="dt-when">
+                          {schedule(s).length ? schedule(s).map((x) => [x.day, x.time, x.room && roomLabel(x.room)].filter(Boolean).join(' ')).join('  ·  ') : 'No schedule yet'}
+                        </small>
+                      </span>
+                    </Link>
+                  </td>
+                  <td className="num-col">{s.studentCount}</td>
+                  <td className="num-col">
+                    <span className={avg != null && avg < 60 ? 'dt-low' : ''}>{pct(avg)}</span>
+                    <small className="dt-sub">{s.finalsItemCount || s.gradingMode === 'final' ? 'final' : 'midterm'}</small>
+                  </td>
+                  <td className="num-col">{s.attendanceRate == null ? '—' : `${s.attendanceRate}%`}</td>
+                  <td><span className={`pill ${s.published ? 'pill-on' : 'pill-off'}`}>{s.published ? 'Published' : 'Hidden'}</span></td>
+                  <td className="dt-actions">
+                    <DownloadButton small className="btn card-export" url={`/api/faculty/export?section=${encodeURIComponent(s.id)}`} title={`Export the ${s.code} grading sheet (Excel)`}>
+                      Excel
+                    </DownloadButton>
+                    <button className="icon-btn danger" title={`Delete ${s.code}`} aria-label={`Delete ${s.code}`} onClick={() => onDelete(s)}>
+                      <Icon name="trash" size={15} />
+                    </button>
+                    <Link to={`/faculty/sections/${s.id}`} className="icon-btn" title={`Open ${s.code}`} aria-label={`Open ${s.code}`}>
+                      <Icon name="chevronRight" size={16} />
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// Attendance trend, grade donut and sections ranked by average, for the latest term.
+function DashCharts({ sections }) {
+  // Present-or-late rate per date, across every section that met that day.
+  const byDate = new Map();
+  for (const s of sections) for (const d of s.attendanceByDate || []) {
+    const x = byDate.get(d.date) || { ok: 0, all: 0 };
+    x.ok += d.ok;
+    x.all += d.all;
+    byDate.set(d.date, x);
+  }
+  const trend = [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, x]) => {
+      const d = new Date(`${date}T00:00:00`);
+      return { label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), title: d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }), value: x.all ? Math.round((x.ok / x.all) * 100) : null };
+    });
+
   const dist = {};
   for (const s of sections) for (const [eq, n] of Object.entries(s.gradeDist || {})) dist[eq] = (dist[eq] || 0) + n;
   const eqs = Object.keys(dist).sort((a, b) => eqRank(b) - eqRank(a));
   const graded = eqs.reduce((a, k) => a + dist[k], 0);
-  const failing = eqs.filter(isFail).reduce((a, k) => a + dist[k], 0);
-  const withAtt = sections.filter((s) => s.attendanceRate != null);
-  const termName = term ? term.term || 'Latest term' : '';
+  let blue = 0;
+  const parts = eqs.map((eq) => ({ label: `Grade ${eq}`, value: dist[eq], color: isFail(eq) ? 'var(--c2)' : DONUT_BLUES[Math.min(blue++, DONUT_BLUES.length - 1)] }));
+
+  const ranked = sections
+    .filter((s) => currentAvg(s) != null)
+    .sort((a, b) => currentAvg(b) - currentAvg(a))
+    .slice(0, 5)
+    .map((s) => ({ key: s.id, code: s.code.slice(-3), title: s.code, sub: `${titleCase(s.subjectTitle || s.subjectCode || '')} · ${s.studentCount} students`, value: currentAvg(s), label: pct(currentAvg(s)) }));
+
   return (
-    <div className="dash-charts">
-      <ChartCard title="Class average by section" sub={`${termName} · percent`} legend={['Midterm', 'Final']}>
-        {withGrades.length ? (
-          <BarRows
-            series={['Midterm', 'Final']}
-            threshold={60}
-            thresholdLabel="Passing line"
-            rows={withGrades.map((s) => ({ label: s.code, sub: s.subjectTitle && titleCase(s.subjectTitle), values: [s.midtermAverage, s.finalsItemCount ? s.finalAverage : null] }))}
-          />
-        ) : (
-          <ChartEmpty>Averages appear once a section has scores.</ChartEmpty>
-        )}
+    <div className="dash-grid">
+      <ChartCard className="dash-wide" title="Attendance trend" sub="Present or late, all sections, by class day">
+        {trend.length ? <Line points={trend} height={210} /> : <ChartEmpty>Take attendance in a section to see the trend.</ChartEmpty>}
       </ChartCard>
-      <ChartCard title="Grade distribution" sub={graded ? `${graded} students · ${failing} failing` : 'All sections this term'}>
-        {graded ? (
-          <Columns data={eqs.map((eq) => ({ label: eq, value: dist[eq], tone: isFail(eq) ? 'fail' : '', title: `Grade ${eq}` }))} unit=" students" />
-        ) : (
-          <ChartEmpty>No grades yet.</ChartEmpty>
-        )}
+      <ChartCard title="Grade distribution" sub={graded ? `${graded} students this term` : 'This term'}>
+        {graded ? <Donut parts={parts} center={graded} centerLabel="students" /> : <ChartEmpty>No grades yet.</ChartEmpty>}
       </ChartCard>
-      <ChartCard title="Attendance rate" sub="Present or late, by section">
-        {withAtt.length ? (
-          <BarRows series={['Attendance']} threshold={80} thresholdLabel="80%" rows={withAtt.map((s) => ({ label: s.code, sub: `${s.sessionCount} session${s.sessionCount === 1 ? '' : 's'}`, values: [s.attendanceRate] }))} />
-        ) : (
-          <ChartEmpty>Take attendance in a section to see it here.</ChartEmpty>
-        )}
+      <ChartCard title="Top sections" sub="By class average">
+        {ranked.length ? <RankList items={ranked} /> : <ChartEmpty>Averages appear once a section has scores.</ChartEmpty>}
       </ChartCard>
     </div>
   );
@@ -244,97 +245,73 @@ export default function FacultyHome() {
 
   const groups = termGroups(sections);
   const latest = groups[0];
-  const students = sections.reduce((s, x) => s + x.studentCount, 0);
-  const published = sections.filter((s) => s.published).length;
-  // Average of this term's section averages (midterm grade until finals start).
-  const current = (latest?.sections || []).map((s) => (s.finalsItemCount || s.gradingMode === 'final' ? s.finalAverage : s.midtermAverage)).filter((v) => v != null);
-  const termAverage = current.length ? current.reduce((a, b) => a + b, 0) / current.length : null;
+  const current = latest?.sections || [];
+  const students = current.reduce((s, x) => s + x.studentCount, 0);
+  const published = current.filter((s) => s.published).length;
+  const avgs = current.map(currentAvg).filter((v) => v != null);
+  const termAverage = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : null;
+  const att = current.reduce((a, s) => { for (const d of s.attendanceByDate || []) { a.ok += d.ok; a.all += d.all; } return a; }, { ok: 0, all: 0 });
   const colors = sectionColors(sections);
 
-  const card = (s) => (
-    <SectionCard
-      key={s.id}
-      s={s}
-      color={colors.get(s.id)}
-      onDelete={async () => {
-        if (await deleteSection(s, { confirm, toast }, { students: s.studentCount, items: s.itemCount }))
-          setSections((list) => list.filter((x) => x.id !== s.id));
-      }}
-    />
+  const remove = async (s) => {
+    if (await deleteSection(s, { confirm, toast }, { students: s.studentCount, items: s.itemCount })) setSections((list) => list.filter((x) => x.id !== s.id));
+  };
+  const newButton = (
+    <button className="btn primary" onClick={() => setCreating(true)}>
+      <Icon name="plus" size={16} /> New Section
+    </button>
   );
 
   return (
-    <>
-      <Hero
-        eyebrow={latest ? latest.label : 'Faculty'}
-        title={<>{greeting()}, <span className="accent">{firstName(user.name)}.</span></>}
-        lead="Choose a section to encode scores, adjust grade percentages, and publish grades to students."
-        actions={
-          <>
-            <TodayChip />
-            <button className="btn primary" onClick={() => setCreating(true)}>
-              <Icon name="plus" size={16} /> New Section
-            </button>
-          </>
-        }
-      />
-      <div className="container lift">
-        <div className="dash-top">
-          <div className="stats stats-2x2">
-            <Stat tone="blue" icon="layers" label="Sections" value={sections.length} sub={`${groups.length} term${groups.length === 1 ? '' : 's'}`} />
-            <Stat tone="teal" icon="users" label="Students" value={students} sub="Across all sections" />
-            <Stat
-              tone="amber"
-              icon="chart"
-              label="Class average"
-              value={<>{termAverage == null ? '—' : termAverage.toFixed(2)}<small>%</small></>}
-              sub={latest ? `${latest.term || 'Latest term'} · ${current.length} section${current.length === 1 ? '' : 's'}` : null}
-            />
-            <Stat tone="ink" icon="eye" label="Published" value={<>{published}<small> / {sections.length}</small></>} sub="Visible to students" />
+    <div className="container dash">
+      {view === 'schedule' && sections.length > 0 ? (
+        <>
+          <div className="page-head">
+            <div>
+              <p className="eyebrow">{latest?.label}</p>
+              <h1>Weekly schedule</h1>
+            </div>
           </div>
-          <TodayPanel sections={latest?.sections || []} colors={colors} onOpenWeek={() => pick('schedule')} />
-        </div>
+          <Timetable sections={current} blocks={blocks} onBlocksChange={setBlocks} termLabel={latest?.label} onExport={() => setReporting(true)} workHours={workHours} onWorkHoursChange={setWorkHours} />
+        </>
+      ) : (
+        <>
+          <WelcomeBanner
+            eyebrow={latest ? latest.label : 'Faculty'}
+            title={<>{greeting()}, <span className="accent">{firstName(user.name)}</span> 👋</>}
+            lead="Here's what's happening in your classes today."
+            actions={newButton}
+          />
 
-        {sections.length > 0 && view === 'sections' && <DashCharts sections={latest?.sections || []} term={latest} />}
+          {sections.length === 0 ? (
+            <EmptyState title="No sections yet">
+              Create a section and import its class list from a PDF.
+              <br />
+              <button className="btn primary" style={{ marginTop: 14 }} onClick={() => setCreating(true)}>
+                <Icon name="plus" size={16} /> New Section
+              </button>
+            </EmptyState>
+          ) : (
+            <>
+              <div className="kpi-row">
+                <Stat tone="blue" icon="layers" label="Sections" value={current.length} sub={`${published} published`} />
+                <Stat tone="gold" icon="users" label="Students" value={students} sub="this term" />
+                <Stat tone="blue" icon="chart" label="Class average" value={<>{termAverage == null ? '—' : termAverage.toFixed(1)}<small>%</small></>} sub={`${avgs.length} section${avgs.length === 1 ? '' : 's'} with scores`} />
+                <Stat tone="gold" icon="check" label="Attendance" value={<>{att.all ? Math.round((att.ok / att.all) * 1000) / 10 : '—'}<small>%</small></>} sub="present or late" />
+              </div>
 
-        {sections.length > 0 && view === 'schedule' ? (
-          <Timetable sections={latest?.sections || []} blocks={blocks} onBlocksChange={setBlocks} termLabel={latest?.label} onExport={() => setReporting(true)} workHours={workHours} onWorkHoursChange={setWorkHours} />
-        ) : sections.length === 0 ? (
-          <EmptyState title="No sections yet">
-            Create a section and import its class list from a PDF.
-            <br />
-            <button className="btn primary" style={{ marginTop: 14 }} onClick={() => setCreating(true)}>
-              <Icon name="plus" size={16} /> New Section
-            </button>
-          </EmptyState>
-        ) : (
-          // One group per academic year + term; each exports its own Excel file so terms are never mixed.
-          groups.map((g) => (
-            <section key={g.key} className="term-group">
-              <div className="section-title-row">
-                <h2>
-                  {g.label} <span className="count-badge">{g.sections.length}</span>
-                </h2>
-                <DownloadButton
-                  url={`/api/faculty/export?${new URLSearchParams({ academicYear: g.academicYear, term: g.term })}`}
-                  title={`Excel grading sheet with the ${g.sections.length} section${g.sections.length === 1 ? '' : 's'} of ${g.label}`}
-                >
-                  Export grading sheet
-                </DownloadButton>
+              <DashCharts sections={current} />
+
+              <div className="dash-split">
+                <div className="dash-tables">
+                  {groups.map((g) => <SectionsTable key={g.key} group={g} colors={colors} onDelete={remove} />)}
+                </div>
+                <TodayPanel sections={current} colors={colors} onOpenWeek={() => pick('schedule')} />
               </div>
-              <div className="grid">
-                {g.sections.map(card)}
-                {/* Adds a section to this academic year + term. */}
-                <button className="section-card add-card" onClick={() => setCreating({ academicYear: g.academicYear, term: g.term })}>
-                  <span className="add-icon"><Icon name="plus" size={20} /></span>
-                  <strong>New Section</strong>
-                  <span>{g.term || 'No term'} · A.Y. {g.academicYear.replace(/\s*-\s*/, ' - ') || '—'}</span>
-                </button>
-              </div>
-            </section>
-          ))
-        )}
-      </div>
+            </>
+          )}
+        </>
+      )}
 
       {reporting && <LoadingReportModal term={latest} onClose={() => setReporting(false)} />}
       {creating && (
@@ -345,6 +322,6 @@ export default function FacultyHome() {
           onCreated={(section, result) => navigate(`/faculty/sections/${section.id}`, { state: { result } })}
         />
       )}
-    </>
+    </div>
   );
 }

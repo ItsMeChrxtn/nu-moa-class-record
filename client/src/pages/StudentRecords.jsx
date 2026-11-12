@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, COMPONENTS, gradeBreakdown, roomLabel, schedule, termOf, track } from '../api.js';
 import { useAuth } from '../auth.jsx';
-import { EmptyState, ErrorState, Hero, Icon, PageLoader, Ring, displayName, eqTone, firstName, titleCase, useUI } from '../ui.jsx';
+import { EmptyState, ErrorState, Icon, PageLoader, Ring, Stat, WelcomeBanner, displayName, eqTone, firstName, titleCase, useUI } from '../ui.jsx';
+import { BarRows, ChartCard, ChartEmpty, Donut } from '../Charts.jsx';
 import { downloadCertificate } from '../certificate.js';
 
 const NAME = Object.fromEntries(COMPONENTS.map((c) => [c.key, c.name]));
@@ -27,15 +28,45 @@ export default function StudentRecords() {
   if (!records) return <PageLoader />;
 
   const record = records[Math.min(active, records.length - 1)];
+  // Each class's latest grade: the final once finals items exist, else the midterm.
+  const latest = records.map((r) => {
+    const finals = r.section.gradingMode === 'final' || r.items.some((it) => termOf(it) === 'POST');
+    return { r, finals, g: finals ? r.grades.final : r.grades.midterm };
+  });
+  const withPct = latest.filter((x) => x.g.percent != null);
+  const avg = withPct.length ? withPct.reduce((a, x) => a + x.g.percent, 0) / withPct.length : null;
+  const att = records.reduce((a, r) => { const c = r.attendance?.counts || {}; for (const k of ['P', 'L', 'A', 'E']) a[k] += c[k] || 0; return a; }, { P: 0, L: 0, A: 0, E: 0 });
+  const attAll = att.P + att.L + att.A;
+  const certs = latest.reduce((a, x) => a + (x.r.grades.midterm.percent != null && x.r.section.gradingMode !== 'final' ? 1 : 0) + (x.finals && x.r.grades.final.percent != null ? 1 : 0), 0);
 
   return (
-    <>
-      <Hero
+    <div className="container dash">
+      <WelcomeBanner
         eyebrow={`Student · ${user.username}`}
-        title={<>Hello, <span className="accent">{firstName(user.name)}.</span></>}
-        lead={records.length > 1 ? `You have ${records.length} classes with published grades. Pick one to see every score behind it.` : 'Every quiz, activity and exam behind your midterm and final grade.'}
+        title={<>Hello, <span className="accent">{firstName(user.name)}</span> 👋</>}
+        lead={records.length ? `You have ${records.length} class${records.length === 1 ? '' : 'es'} with published grades. Here is how you are doing.` : 'Your grades will appear here once your faculty publishes them.'}
       />
-      <div className="container">
+      {records.length > 0 && (
+        <>
+          <div className="kpi-row">
+            <Stat tone="blue" icon="book" label="Classes" value={records.length} sub="with published grades" />
+            <Stat tone="gold" icon="chart" label="Average" value={<>{avg == null ? '—' : avg.toFixed(1)}<small>%</small></>} sub="latest grade per class" />
+            <Stat tone="blue" icon="check" label="Attendance" value={<>{attAll ? Math.round(((att.P + att.L) / attAll) * 100) : '—'}<small>%</small></>} sub={`${att.A} absent · ${att.L} late`} />
+            <Stat tone="gold" icon="award" label="Certificates" value={certs} sub="ready to download" />
+          </div>
+          <div className="dash-grid student-grid">
+            <ChartCard className="dash-wide" title="My grades" sub="Latest grade per class, percent">
+              <BarRows series={['Grade']} threshold={60} thresholdLabel="Passing" rows={latest.map((x) => ({ label: x.r.section.code, sub: `${titleCase(x.r.section.subjectTitle || '')} · ${x.finals ? 'Final' : 'Midterm'} · GP ${x.g.equivalent ?? '—'}`, values: [x.g.percent] }))} />
+            </ChartCard>
+            <ChartCard title="Attendance" sub="All classes">
+              {att.P + att.L + att.A + att.E ? (
+                <Donut parts={[{ label: 'Present', value: att.P, color: 'var(--c1)' }, { label: 'Late', value: att.L, color: 'var(--c2)' }, { label: 'Absent', value: att.A, color: 'var(--red)' }, { label: 'Excused', value: att.E, color: 'var(--c3)' }]} center={att.P + att.L + att.A + att.E} centerLabel="sessions" size={130} />
+              ) : <ChartEmpty>No attendance yet.</ChartEmpty>}
+            </ChartCard>
+          </div>
+        </>
+      )}
+      <div>
         {records.length === 0 ? (
           <EmptyState icon="book" title="No published records yet">
             Your grades will appear here once your faculty publishes them. Please check back later.
@@ -66,7 +97,7 @@ export default function StudentRecords() {
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
 

@@ -3,11 +3,12 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { api } from './api.js';
 import { useAuth } from './auth.jsx';
 import NotificationBell from './Notifications.jsx';
-import { Avatar, BrandMark, Icon, firstName, titleCase, useUI } from './ui.jsx';
+import { Avatar, BrandMark, Icon, TodayChip, firstName, titleCase, useUI } from './ui.jsx';
 
 const ADMIN_TABS = [
+  { tab: 'dashboard', label: 'Dashboard', icon: 'layers' },
   { tab: 'faculty', label: 'Faculty', icon: 'users' },
-  { tab: 'sections', label: 'Sections', icon: 'layers' },
+  { tab: 'sections', label: 'Sections', icon: 'book' },
   { tab: 'students', label: 'Students', icon: 'user' },
   { tab: 'activity', label: 'Activity', icon: 'list' },
 ];
@@ -76,7 +77,7 @@ export default function Layout() {
       </>
     );
   } else if (ready && user.role === 'admin') {
-    const tab = params.get('tab') || 'faculty';
+    const tab = params.get('tab') || 'dashboard';
     nav = (
       <>
         <span className="side-label">Administration</span>
@@ -137,9 +138,17 @@ export default function Layout() {
                 <small>National University · MOA</small>
               </span>
             </Link>
+            {nav && user.role === 'faculty' && sections.length > 0 && <SectionSearch sections={sections} />}
             {user && (
               <div className="topbar-user">
+                {nav && <span className="hide-sm"><TodayChip /></span>}
                 {user.role === 'student' && ready && <NotificationBell />}
+                {nav && (
+                  <span className="top-me hide-sm" title={titleCase(user.name)}>
+                    <Avatar name={user.name} size={32} />
+                    <span><strong>{firstName(user.name)}</strong><small>{{ admin: 'Administrator', faculty: 'Faculty', student: 'Student' }[user.role]}</small></span>
+                  </span>
+                )}
                 {!nav && (
                   <button className="btn" title="Log out" onClick={doLogout}>
                     <Icon name="logout" size={16} />
@@ -155,6 +164,36 @@ export default function Layout() {
         </main>
         <footer className="app-footer">© {new Date().getFullYear()} National University MOA · Class Record</footer>
       </div>
+    </div>
+  );
+}
+
+// Jump to a section by code or subject from the top bar.
+function SectionSearch({ sections }) {
+  const navigate = useNavigate();
+  const [q, setQ] = useState('');
+  const hits = q.trim() ? sections.filter((s) => `${s.code} ${s.subjectTitle || ''} ${s.subjectCode || ''}`.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 6) : [];
+  const go = (s) => {
+    setQ('');
+    navigate(`/faculty/sections/${s.id}`);
+  };
+  return (
+    <div className="top-search">
+      <Icon name="search" size={16} />
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && hits[0]) go(hits[0]); if (e.key === 'Escape') setQ(''); }}
+        placeholder="Search a section…"
+        aria-label="Search a section"
+      />
+      {hits.length > 0 && (
+        <ul className="top-hits">
+          {hits.map((s) => (
+            <li key={s.id}><button type="button" onMouseDown={(e) => { e.preventDefault(); go(s); }}><b>{s.code}</b><span>{titleCase(s.subjectTitle || s.subjectCode || '')}</span></button></li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

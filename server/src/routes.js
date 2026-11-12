@@ -291,9 +291,20 @@ faculty.get(
           att.ok += (c.P || 0) + (c.L || 0);
           att.all += (c.P || 0) + (c.L || 0) + (c.A || 0);
         }
+        // Present or late per session date, for the dashboard attendance trend.
+        const attendanceByDate = (s.attendance?.sessions || []).map((ss) => {
+          let ok = 0, all = 0;
+          for (const e of list) {
+            const m = e.attendance?.get?.(String(ss._id)) ?? e.attendance?.[String(ss._id)];
+            if (m === 'P' || m === 'L') ok++;
+            if (m === 'P' || m === 'L' || m === 'A') all++;
+          }
+          return { date: ss.date, ok, all };
+        });
         return {
           ...sectionSummary(s),
           published: s.published,
+          attendanceByDate,
           studentCount: list.length,
           itemCount: s.items.length,
           // MPT counts as Midterms, CPT as Finals; CP/EA by their period.

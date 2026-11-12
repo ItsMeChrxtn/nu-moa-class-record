@@ -115,7 +115,7 @@ export function Avatar({ name, size = 36 }) {
 }
 
 // tone: blue | teal | amber | ink | red — the colour of the icon tile.
-export function Stat({ icon, label, value, sub, tone }) {
+export function Stat({ icon, label, value, sub, tone, trend }) {
   return (
     <div className={`stat ${tone ? `stat-tone tone-${tone}` : ''}`}>
       <div className="stat-top">
@@ -123,8 +123,46 @@ export function Stat({ icon, label, value, sub, tone }) {
         {icon && (tone ? <span className="stat-icon"><Icon name={icon} size={18} /></span> : <Icon name={icon} size={16} />)}
       </div>
       <div className="stat-value">{value}</div>
-      {sub && <div className="stat-sub">{sub}</div>}
+      {(sub || trend) && (
+        <div className="stat-sub">
+          {trend && <span className={`stat-trend ${trend.dir || ''}`}>{trend.dir === 'down' ? '▼' : trend.dir === 'up' ? '▲' : ''} {trend.text}</span>}
+          {sub && <span>{sub}</span>}
+        </div>
+      )}
     </div>
+  );
+}
+
+// Dashboard welcome card: greeting on the left, a drawn graduation scene on the right.
+export function WelcomeBanner({ eyebrow, title, lead, actions }) {
+  return (
+    <section className="welcome">
+      <div className="welcome-text">
+        {eyebrow && <p className="eyebrow">{eyebrow}</p>}
+        <h1>{title}</h1>
+        {lead && <p className="welcome-lead">{lead}</p>}
+        {actions && <div className="welcome-actions">{actions}</div>}
+      </div>
+      <svg className="welcome-art" viewBox="0 0 260 150" aria-hidden="true">
+        <defs>
+          <linearGradient id="wa-b" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stopColor="#6b8cff" /><stop offset="1" stopColor="#2f54eb" /></linearGradient>
+          <linearGradient id="wa-g" x1="0" x2="1"><stop offset="0" stopColor="#ffd35a" /><stop offset="1" stopColor="#f5b100" /></linearGradient>
+        </defs>
+        <circle cx="200" cy="58" r="54" fill="#ffffff0d" />
+        <circle cx="200" cy="58" r="34" fill="#ffffff0a" />
+        <rect x="120" y="112" width="120" height="16" rx="4" fill="url(#wa-b)" />
+        <rect x="128" y="96" width="104" height="16" rx="4" fill="#e9eeff" />
+        <rect x="136" y="80" width="90" height="16" rx="4" fill="url(#wa-g)" />
+        <rect x="128" y="101" width="104" height="3" fill="#c9d4ff" />
+        <path d="M181 26 l46 18 -46 18 -46 -18z" fill="#f1f4ff" />
+        <path d="M157 51 v14 c0 8 48 8 48 0 v-14 l-24 9z" fill="#dfe6ff" />
+        <path d="M227 44 v22" stroke="url(#wa-g)" strokeWidth="3" strokeLinecap="round" />
+        <circle cx="227" cy="69" r="4.5" fill="url(#wa-g)" />
+        <path d="M40 120 q10 -40 34 -46" stroke="#ffffff22" strokeWidth="2" fill="none" />
+        <circle cx="74" cy="74" r="5" fill="url(#wa-g)" />
+        <circle cx="40" cy="40" r="3" fill="#ffffff55" /><circle cx="96" cy="24" r="2" fill="#ffffff44" /><circle cx="248" cy="132" r="2.5" fill="#ffffff55" />
+      </svg>
+    </section>
   );
 }
 

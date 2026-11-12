@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
-import { ChartCard, ChartEmpty, Columns, Stack } from '../Charts.jsx';
+import { ChartCard, ChartEmpty, Donut, Line, RankList } from '../Charts.jsx';
 import { useAuth } from '../auth.jsx';
-import { Avatar, EmptyState, ErrorState, Hero, Icon, Modal, PageLoader, Stat, TodayChip, firstName, titleCase, useUI } from '../ui.jsx';
+import { Avatar, EmptyState, ErrorState, Icon, Modal, PageLoader, Stat, WelcomeBanner, firstName, initials, titleCase, useUI } from '../ui.jsx';
 
 const TABS = [
+  { key: 'dashboard', label: 'Dashboard', icon: 'layers' },
   { key: 'faculty', label: 'Faculty', icon: 'users' },
   { key: 'sections', label: 'Sections', icon: 'layers' },
   { key: 'students', label: 'Students', icon: 'user' },
@@ -78,7 +79,7 @@ export default function AdminHome() {
   const { user } = useAuth();
   // The sidebar picks the tab (?tab=…).
   const [params] = useSearchParams();
-  const tab = TABS.some((t) => t.key === params.get('tab')) ? params.get('tab') : 'faculty';
+  const tab = TABS.some((t) => t.key === params.get('tab')) ? params.get('tab') : 'dashboard';
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState('');
   const refresh = useCallback(() => api('/admin/overview').then(setOverview).catch((e) => setError(e.message)), []);
@@ -87,51 +88,102 @@ export default function AdminHome() {
   if (error) return <ErrorState message={error} />;
   if (!overview) return <PageLoader />;
 
+  const meta = TABS.find((t) => t.key === tab);
+  return (
+    <div className="container dash">
+      {tab === 'dashboard' ? (
+        <AdminDashboard overview={overview} user={user} />
+      ) : (
+        <>
+          <div className="page-head">
+            <div>
+              <p className="eyebrow">Administrator · NU MOA</p>
+              <h1>{meta.label}</h1>
+            </div>
+          </div>
+          {tab === 'faculty' && <FacultyTab onChange={refresh} mailConfigured={overview.mailConfigured} />}
+          {tab === 'sections' && <SectionsTab />}
+          {tab === 'students' && <StudentsTab />}
+          {tab === 'activity' && <ActivityTab />}
+        </>
+      )}
+    </div>
+  );
+}
+
+// The admin dashboard: totals, activity, account status, busiest faculty and the latest actions.
+function AdminDashboard({ overview, user }) {
+  const [faculty, setFaculty] = useState(null);
+  const [recent, setRecent] = useState(null);
+  useEffect(() => {
+    api('/admin/faculty').then((d) => setFaculty(d.faculty)).catch(() => setFaculty([]));
+    api('/admin/activity?limit=6').then((d) => setRecent(d.activity)).catch(() => setRecent([]));
+  }, []);
+  const activity = (overview.activity || []).map((d) => {
+    const day = new Date(`${d.day}T00:00:00`);
+    return { label: day.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), title: day.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }), value: d.n };
+  });
+  const maxAct = Math.max(4, ...activity.map((a) => a.value));
+  const notSent = Math.max(0, (overview.accounts ?? 0) - (overview.activeAccounts ?? 0) - (overview.sentAccounts ?? 0));
+  const top = (faculty || []).filter((f) => f.students > 0 || f.sections > 0).sort((a, b) => b.students - a.students).slice(0, 5);
+  const maxStudents = Math.max(1, ...top.map((f) => f.students));
   return (
     <>
-      <Hero
+      <WelcomeBanner
         eyebrow="Administrator · NU MOA"
-        title={<>Admin <span className="accent">console.</span></>}
-        lead={`Welcome, ${firstName(user.name)}. Manage faculty accounts, see every section, and review recent activity.`}
-        actions={<TodayChip />}
+        title={<>Welcome back, <span className="accent">{firstName(user.name)}</span> 👋</>}
+        lead="Manage faculty accounts, see every section, and review recent activity."
+        actions={<Link className="btn primary" to="/admin?tab=faculty"><Icon name="userPlus" size={16} /> Faculty accounts</Link>}
       />
-      <div className="container">
-        <div className="stats">
-          <Stat tone="blue" icon="users" label="Faculty" value={overview.faculty} sub={overview.disabled ? `${overview.disabled} disabled` : 'All active'} />
-          <Stat tone="teal" icon="layers" label="Sections" value={overview.sections} sub={`${overview.published} published`} />
-          <Stat tone="amber" icon="user" label="Students" value={overview.students} sub={`${overview.enrollments} enrollments`} />
-          <Stat tone="ink" icon="key" label="Student accounts" value={<>{overview.activeAccounts ?? 0}<small> / {overview.accounts ?? 0}</small></>} sub="Signed in and set a password" />
-        </div>
-
-        <div className="dash-charts two">
-          <ChartCard title="Activity" sub={`Last 14 days · ${(overview.activity || []).reduce((a, d) => a + d.n, 0)} actions`}>
-            {!(overview.activity || []).some((d) => d.n) ? <ChartEmpty>No activity in the last 14 days.</ChartEmpty> : <Columns
-              data={(overview.activity || []).map((d) => {
-                const day = new Date(`${d.day}T00:00:00`);
-                return { label: day.toLocaleDateString(undefined, { day: 'numeric' }), value: d.n, title: day.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) };
-              })}
-              unit=" actions"
-              showValues={false}
-            />}
-          </ChartCard>
-          <ChartCard title="Student accounts" sub={`${overview.accounts ?? 0} accounts`}>
-            <Stack
-              parts={[
-                { label: 'Signed in', value: overview.activeAccounts ?? 0, color: 'var(--teal)' },
-                { label: 'Emailed, not signed in', value: overview.sentAccounts ?? 0, color: 'var(--blue)' },
-                { label: 'Not sent yet', value: Math.max(0, (overview.accounts ?? 0) - (overview.activeAccounts ?? 0) - (overview.sentAccounts ?? 0)), color: 'var(--line-2)' },
-              ]}
-            />
-            <p className="ch-foot">{overview.students - (overview.accounts ?? 0) > 0 ? `${overview.students - overview.accounts} students have no account yet.` : 'Every student has an account.'}</p>
-          </ChartCard>
-        </div>
-        <h2 className="tab-title"><Icon name={TABS.find((t) => t.key === tab).icon} size={18} /> {TABS.find((t) => t.key === tab).label}</h2>
-
-        {tab === 'faculty' && <FacultyTab onChange={refresh} mailConfigured={overview.mailConfigured} />}
-        {tab === 'sections' && <SectionsTab />}
-        {tab === 'students' && <StudentsTab />}
-        {tab === 'activity' && <ActivityTab />}
+      <div className="kpi-row">
+        <Stat tone="blue" icon="users" label="Faculty" value={overview.faculty} sub={overview.disabled ? `${overview.disabled} disabled` : 'All active'} />
+        <Stat tone="gold" icon="layers" label="Sections" value={overview.sections} sub={`${overview.published} published`} />
+        <Stat tone="blue" icon="user" label="Students" value={overview.students} sub={`${overview.enrollments} enrollments`} />
+        <Stat tone="gold" icon="key" label="Student accounts" value={<>{overview.activeAccounts ?? 0}<small> / {overview.accounts ?? 0}</small></>} sub="signed in" />
       </div>
+      <div className="dash-grid">
+        <ChartCard className="dash-wide" title="Activity" sub={`Actions per day · last 14 days · ${activity.reduce((a, d) => a + d.value, 0)} total`}>
+          {activity.some((d) => d.value) ? <Line points={activity} height={210} unit=" actions" max={maxAct} /> : <ChartEmpty>No activity in the last 14 days.</ChartEmpty>}
+        </ChartCard>
+        <ChartCard title="Student accounts" sub={`${overview.accounts ?? 0} accounts`}>
+          <Donut
+            parts={[
+              { label: 'Signed in', value: overview.activeAccounts ?? 0, color: 'var(--c1)' },
+              { label: 'Emailed', value: overview.sentAccounts ?? 0, color: 'var(--c3)' },
+              { label: 'Not sent', value: notSent, color: 'var(--c2)' },
+            ]}
+            center={overview.accounts ?? 0}
+            centerLabel="accounts"
+          />
+        </ChartCard>
+        <ChartCard title="Top faculty" sub="By number of students">
+          {faculty == null ? <ChartEmpty>Loading…</ChartEmpty> : top.length ? (
+            <RankList max={maxStudents} items={top.map((f) => ({ key: f.id, code: initials(f.name), title: titleCase(f.name), sub: `${f.sections} section${f.sections === 1 ? '' : 's'}`, value: f.students, label: `${f.students}` }))} />
+          ) : <ChartEmpty>No sections yet.</ChartEmpty>}
+        </ChartCard>
+      </div>
+      <section className="card dash-table">
+        <header className="dash-table-head">
+          <h3>Recent activity</h3>
+          <Link className="link-more" to="/admin?tab=activity">View all <Icon name="chevronRight" size={14} /></Link>
+        </header>
+        <div className="table-scroll">
+          <table className="dtable">
+            <thead><tr><th>Who</th><th>Action</th><th>What</th><th>When</th></tr></thead>
+            <tbody>
+              {(recent || []).map((a) => (
+                <tr key={a.id}>
+                  <td><span className="dt-sec"><span className="dt-tile">{initials(a.actor || '?')}</span><span><strong>{titleCase(a.actor || 'Someone')}</strong><small>{a.role}</small></span></span></td>
+                  <td><span className={`pill ${/delete|remove|disable/.test(a.action) ? 'pill-warn' : 'pill-on'}`}>{ACTIONS[a.action] || a.action}</span></td>
+                  <td className="dt-what">{a.target}</td>
+                  <td className="muted">{new Date(a.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
+                </tr>
+              ))}
+              {recent && recent.length === 0 && <tr><td colSpan={4} className="muted">No activity yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </>
   );
 }
