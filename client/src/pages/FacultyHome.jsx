@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChartCard, ChartEmpty, Columns, Donut, Line, RankList } from '../Charts.jsx';
-import { api, meetingsOn, roomLabel, schedule, todayCode } from '../api.js';
+import { api, meetingsOn, roomLabel, schedule, to12, todayCode } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { NewSectionModal, deleteSection } from '../Roster.jsx';
 import Timetable, { LoadingReportModal, sectionColors } from '../Timetable.jsx';
@@ -42,54 +42,68 @@ function TodayPanel({ sections, colors, onOpenWeek }) {
     .flatMap((s) => meetingsOn(s, day).map((m) => ({ ...m, s })))
     .sort((a, b) => (a.start || '99').localeCompare(b.start || '99'));
   const nextIdx = classes.findIndex((c) => toMin(c.end) == null || toMin(c.end) > mins);
+  const left = classes.filter((c) => toMin(c.end) == null || toMin(c.end) > mins).length;
+  const hm = (t) => (t ? to12(t).replace(' ', ' ') : '');
+  const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
   return (
-    <section className="today card">
-      <div className="today-head">
-        <div>
-          <span className="stat-label">Today · {now.toLocaleDateString(undefined, { weekday: 'long' })}</span>
-          <h2>{classes.length ? `${classes.length} class${classes.length === 1 ? '' : 'es'} today` : 'No classes today'}</h2>
+    <section className="today2 card">
+      <header className="t2-head">
+        <div className="t2-date">
+          <span className="t2-dow">{now.toLocaleDateString(undefined, { weekday: 'short' })}</span>
+          <span className="t2-day">{now.getDate()}</span>
         </div>
-        <Icon name="calendar" size={20} />
-      </div>
-      {classes.length === 0 ? (
-        <p className="today-empty">No classes today. Your week is below.</p>
-      ) : (
-        <ol className="tl">
+        <div className="t2-title">
+          <span className="t2-kicker">Today&apos;s classes</span>
+          <h2>{classes.length ? `${classes.length} class${classes.length === 1 ? '' : 'es'}` : 'No classes today'}</h2>
+          <span className="t2-sub">{classes.length ? (left ? `${left} still to go` : 'All done for the day') : 'Enjoy the free day'}</span>
+        </div>
+        <button type="button" className="btn t2-week" onClick={onOpenWeek}>
+          <Icon name="calendar" size={15} /> <span>Full week</span>
+        </button>
+      </header>
+
+      {classes.length > 0 && (
+        <ol className="t2-list">
           {classes.map((c, i) => {
-            const live = toMin(c.start) != null && toMin(c.start) <= mins && mins < toMin(c.end);
-            const done = toMin(c.end) != null && toMin(c.end) <= mins;
+            const st = toMin(c.start);
+            const en = toMin(c.end);
+            const live = st != null && st <= mins && mins < en;
+            const done = en != null && en <= mins;
             const state = live ? 'now' : done ? 'done' : i === nextIdx ? 'next' : 'later';
-            const [from, to] = (c.time || '').split(' - ');
+            const progress = live ? Math.round(((mins - st) / (en - st)) * 100) : done ? 100 : 0;
             return (
-              <li key={`${c.s.id}-${i}`} className={`tl-item is-${state}`}>
-                <span className="tl-time"><b>{from || '—'}</b><small>{to || ''}</small></span>
-                <span className="tl-dot" aria-hidden="true" />
-                <Link to={`/faculty/sections/${c.s.id}`} className="tl-card">
-                  <span className="tl-main">
+              <li key={`${c.s.id}-${i}`} className={`t2-item is-${state} sc-${colors.get(c.s.id) ?? 0}`}>
+                <Link to={`/faculty/sections/${c.s.id}`} className="t2-card">
+                  <span className="t2-time">
+                    <b>{hm(c.start) || '—'}</b>
+                    <small>to {hm(c.end) || '—'}</small>
+                  </span>
+                  <span className="t2-main">
                     <strong>{c.s.code}</strong>
                     <span>{titleCase(c.s.subjectTitle || c.s.subjectCode || '')}</span>
                   </span>
-                  {c.room && <span className="tl-room">{roomLabel(c.room)}</span>}
-                  <span className={`tl-tag tag-${state}`}>{{ now: 'In class now', done: 'Done', next: 'Up next', later: 'Later' }[state]}</span>
+                  {c.room ? <span className="t2-room">{roomLabel(c.room)}</span> : <span />}
+                  <span className={`t2-tag tag-${state}`}>{{ now: 'In class now', done: 'Done', next: 'Up next', later: 'Later' }[state]}</span>
+                  {(live || done) && <span className="t2-prog"><i style={{ width: `${progress}%` }} /></span>}
                 </Link>
               </li>
             );
           })}
         </ol>
       )}
-      <button type="button" className="week-strip" onClick={onOpenWeek} title="Open the weekly schedule">
-        {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => {
+
+      <div className="t2-week-strip" aria-label="Classes per day this week">
+        {days.map((d) => {
           const n = sections.reduce((a, s) => a + meetingsOn(s, d).length, 0);
           return (
-            <span key={d} className={`week-day ${d === day ? 'is-today' : ''} ${n ? '' : 'free'}`}>
-              <small>{d}</small>
-              <strong>{n}</strong>
-            </span>
+            <button key={d} type="button" className={`t2-day-pill ${d === day ? 'is-today' : ''}`} onClick={onOpenWeek} title={`${n} class${n === 1 ? '' : 'es'} on ${d}`}>
+              <span>{d.slice(0, 1) + d.slice(1).toLowerCase()}</span>
+              <span className="t2-dots">{n ? Array.from({ length: Math.min(n, 4) }, (_, k) => <i key={k} />) : <em>free</em>}</span>
+            </button>
           );
         })}
-        <span className="week-go">Week <Icon name="chevronRight" size={14} /></span>
-      </button>
+      </div>
     </section>
   );
 }

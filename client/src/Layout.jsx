@@ -114,7 +114,7 @@ export default function Layout() {
               <BrandMark />
               <span className="brand-text">
                 <strong>Class Record</strong>
-                <small>National University · MOA</small>
+                <small>NU MOA</small>
               </span>
             </Link>
             <nav className="side-nav" aria-label="Main">{nav}</nav>
@@ -135,7 +135,7 @@ export default function Layout() {
               <BrandMark />
               <span className="brand-text">
                 <strong>Class Record</strong>
-                <small>National University · MOA</small>
+                <small>NU MOA</small>
               </span>
             </Link>
             {nav && user.role === 'faculty' && sections.length > 0 && <SectionSearch sections={sections} />}

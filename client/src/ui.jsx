@@ -66,7 +66,7 @@ export function Icon({ name, size = 18, className = '', strokeWidth = 2 }) {
 }
 
 export function BrandMark({ size = 'md' }) {
-  return <span className={`brand-mark ${size}`} aria-hidden="true" />;
+  return <img src="/logo.svg" alt="" className={`brand-logo ${size}`} aria-hidden="true" />;
 }
 
 // "LAST, FIRST MIDDLE" -> { first: "First Middle", last: "Last" }

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <!-- Class Record mark: the NU MOA building's hexagon, an open record book and a gold ribbon. -->
+  <defs>
+    <linearGradient id="hx" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3a63f0"/>
+      <stop offset="0.55" stop-color="#1f3fb8"/>
+      <stop offset="1" stop-color="#132a7a"/>
+    </linearGradient>
+    <linearGradient id="gd" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd35a"/>
+      <stop offset="1" stop-color="#e9a400"/>
+    </linearGradient>
+    <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#dfe7ff"/>
+    </linearGradient>
+  </defs>
+  <!-- hexagon body with a soft inner edge, like the building's window frames -->
+  <path d="M60 4 108 32v56L60 116 12 88V32z" fill="url(#hx)"/>
+  <path d="M60 4 108 32v56L60 116 12 88V32z" fill="none" stroke="#ffffff" stroke-opacity=".22" stroke-width="3"/>
+  <path d="M60 14 99 37v46L60 106 21 83V37z" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="1.5"/>
+  <!-- open book -->
+  <path d="M60 46c-9-6-20-7.5-31-6v39c11-1.5 22 0 31 6z" fill="url(#pg)"/>
+  <path d="M60 46c9-6 20-7.5 31-6v39c-11-1.5-22 0-31 6z" fill="url(#pg)"/>
+  <path d="M60 46v39" stroke="#1f3fb8" stroke-width="2.4" stroke-linecap="round"/>
+  <!-- record lines on the left page, a rising grade line on the right -->
+  <g stroke="#9db0ee" stroke-width="2.2" stroke-linecap="round">
+    <path d="M36 52.5c6-.6 12 .2 17 2.2"/>
+    <path d="M36 60c6-.6 12 .2 17 2.2"/>
+    <path d="M36 67.5c6-.6 12 .2 17 2.2"/>
+  </g>
+  <path d="M67 70l6-7 5 4 7-10" fill="none" stroke="#1f3fb8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="85" cy="57" r="3.2" fill="url(#gd)"/>
+  <!-- gold bookmark ribbon -->
+  <path d="M73 41.5v17l5-3.6 5 3.6v-18.6c-3.4-.4-6.8-.2-10 1.6z" fill="url(#gd)"/>
+</svg>
