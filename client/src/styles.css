@@ -2462,3 +2462,26 @@ code, kbd { background: var(--surface-2); border-color: var(--line-2); color: va
 .hero-compact .hero-actions .sv-btn { background: #fff; color: #13298a; }
 .hero-compact .hero-actions .sv-btn:not(.on) { background: #fff4d6; color: #6b4b00; }
 .sv-pop { left: 0; right: auto; }
+/* ───────────── Schedule colours: one per section, admin hours yellow, breaks white ───────────── */
+.sc-0 { --c: #2f54eb; --c-soft: #e8eeff; --c-ink: #1e3a8a; }
+.sc-1 { --c: #0d9488; --c-soft: #dcf5f1; --c-ink: #115e59; }
+.sc-2 { --c: #7c3aed; --c-soft: #efe8fe; --c-ink: #5b21b6; }
+.sc-3 { --c: #db2777; --c-soft: #fde7f1; --c-ink: #9d174d; }
+.sc-4 { --c: #059669; --c-soft: #dcf6ea; --c-ink: #065f46; }
+.sc-5 { --c: #0284c7; --c-soft: #e0f2fe; --c-ink: #075985; }
+.sc-6 { --c: #c2410c; --c-soft: #fdeee3; --c-ink: #9a3412; }
+.sc-7 { --c: #4338ca; --c-soft: #e8e7fd; --c-ink: #312e81; }
+.tt-block[class*='sc-'] { background: var(--c-soft) !important; border-color: var(--c) !important; color: var(--c-ink) !important; box-shadow: inset 4px 0 0 var(--c) !important; }
+.tt-block[class*='sc-']:hover { box-shadow: inset 4px 0 0 var(--c), 0 8px 18px -10px var(--c) !important; }
+.tt-block.tt-other { background: #fff1c2 !important; border: 1px solid #f5b100 !important; color: #6b4b00 !important; box-shadow: inset 4px 0 0 #f5b100 !important; background-image: none !important; }
+.tt-block.tt-break { background: #ffffff !important; border: 1px dashed #b9c3d8 !important; color: #4a5578 !important; box-shadow: none !important; background-image: none !important; }
+.wb-work { background: #f5b100 !important; }
+.wb-break { background: #ffffff !important; border: 1px dashed #b9c3d8; }
+.dt-tile[class*='sc-'], .ch-rank-tile[class*='sc-'] { background: var(--c) !important; color: #fff !important; }
+.section-card[class*='sc-'] .code-badge { color: var(--c-ink); }
+.roster-new { margin-left: 10px; font-size: 0.74rem; font-weight: 600; color: var(--blue); }
+.roster-tag { flex: none; padding: 3px 9px; border-radius: 999px; font-size: 0.68rem; font-weight: 700; }
+.roster-tag.new { background: var(--blue); color: #fff; }
+.roster-tag.old { background: var(--surface-3); color: var(--ink-3); }
+.roster-row.is-enrolled { opacity: 0.6; }
+.roster-row.is-new { background: #f3f6ff; }

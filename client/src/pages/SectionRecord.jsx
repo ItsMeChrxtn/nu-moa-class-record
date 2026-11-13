@@ -533,6 +533,7 @@ export default function SectionRecord() {
       {panel === 'students' && (
         <AddStudentsModal
           section={section}
+          enrolledNos={data.rows.map((r) => r.student.studentNo)}
           onClose={closePanel}
           onDone={({ result, ...detail }) => {
             setData(detail);

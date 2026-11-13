@@ -13,7 +13,7 @@ const WEEK = [
 ];
 const SLOT = 30; // minutes per grid row
 const ROW = 28; // px per grid row
-const PALETTE = 6; // .sc-0 … .sc-5 in styles.css
+const PALETTE = 8; // .sc-0 … .sc-7 in styles.css
 const toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 const label12 = (m) => to12(`${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`).replace(':00 ', ' ');
 

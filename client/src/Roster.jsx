@@ -1,11 +1,12 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { api, rowsFromText } from './api.js';
 import { GradingModeChoice, ScheduleEditor, blankRow, filledRows } from './SectionForm.jsx';
 import { EMAIL, isStudentNo } from './studentParser.js';
 import { Avatar, Icon, Modal } from './ui.jsx';
 
 // PDF drop zone + editable preview of the class list before anything is saved.
-export function StudentImporter({ students, setStudents, onDetails }) {
+// enrolled: student numbers already in the class (adding to an existing section); they are marked, not added again.
+export function StudentImporter({ students, setStudents, onDetails, enrolled }) {
   const inputRef = useRef(null);
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -102,6 +103,7 @@ export function StudentImporter({ students, setStudents, onDetails }) {
         <div className="roster-head">
           <strong>
             Students <span className="count-badge">{students.length}</span>
+            {enrolled && students.length > 0 && <span className="roster-new">{students.filter((x) => !enrolled.has(x.studentNo)).length} new · {students.filter((x) => enrolled.has(x.studentNo)).length} already in class</span>}
             {students.length > 0 && <span className="roster-emails">{withEmail} with email</span>}
           </strong>
           {students.length > 0 && (
@@ -112,8 +114,8 @@ export function StudentImporter({ students, setStudents, onDetails }) {
         </div>
         <div className="roster-list">
           {students.length === 0 && <div className="roster-empty">No students yet. Import a PDF or add them manually.</div>}
-          {students.map((s, i) => (
-            <div key={s.studentNo} className="roster-row">
+          {(enrolled ? [...students].sort((a, b) => enrolled.has(a.studentNo) - enrolled.has(b.studentNo)) : students).map((s, i) => (
+            <div key={s.studentNo} className={`roster-row ${enrolled?.has(s.studentNo) ? 'is-enrolled' : enrolled ? 'is-new' : ''}`}>
               <span className="row-index">{i + 1}</span>
               <Avatar name={s.name} size={28} />
               <div className="roster-info">
@@ -121,6 +123,7 @@ export function StudentImporter({ students, setStudents, onDetails }) {
                 <span>{s.studentNo}{s.course && ` · ${s.course}`}</span>
                 {s.email && <span className="roster-email">{s.email}</span>}
               </div>
+              {enrolled && (enrolled.has(s.studentNo) ? <span className="roster-tag old">Already in class</span> : <span className="roster-tag new">New</span>)}
               <button type="button" className="icon-btn danger" title="Remove" onClick={() => setStudents(students.filter((x) => x !== s))}>
                 <Icon name="x" size={15} />
               </button>
@@ -322,8 +325,10 @@ export function NewSectionModal({ sections, onClose, onCreated, preset }) {
   );
 }
 
-export function AddStudentsModal({ section, onClose, onDone }) {
+export function AddStudentsModal({ section, onClose, onDone, enrolledNos = [] }) {
   const [students, setStudents] = useState([]);
+  const enrolled = useMemo(() => new Set(enrolledNos), [enrolledNos]);
+  const fresh = students.filter((s) => !enrolled.has(s.studentNo)).length;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -342,21 +347,22 @@ export function AddStudentsModal({ section, onClose, onDone }) {
   return (
     <Modal
       title={`Add students to ${section.code}`}
-      subtitle="Students who are already enrolled are skipped and their scores are kept."
+      subtitle="Only students who are not in this class yet are added. Everyone already enrolled keeps their scores."
       icon="users"
       onClose={onClose}
       width={620}
       footer={
         <>
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" disabled={busy || !students.length} onClick={submit}>
+          {students.length > 0 && !fresh && <span className="foot-note muted small">Everyone on this list is already in the class.</span>}
+          <button className="btn primary" disabled={busy || !fresh} onClick={submit}>
             <Icon name="check" size={16} />
-            {busy ? 'Enrolling…' : `Enroll ${students.length} students`}
+            {busy ? 'Adding…' : `Add ${fresh} new student${fresh === 1 ? '' : 's'}`}
           </button>
         </>
       }
     >
-      <StudentImporter students={students} setStudents={setStudents} />
+      <StudentImporter students={students} setStudents={setStudents} enrolled={enrolled} />
       {error && <div className="alert error"><Icon name="alert" />{error}</div>}
     </Modal>
   );
