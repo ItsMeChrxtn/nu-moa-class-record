@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, COMPONENTS, PERIODS, TERM_COMPONENTS, fmt, groupItems, roomLabel, schedule, sortItems, termOf } from '../api.js';
 import { AddStudentsModal, ImportResultModal, deleteSection } from '../Roster.jsx';
@@ -17,6 +17,61 @@ const TERM = {
   MID: { name: 'Midterms', grade: 'midterm', gradeLabel: 'Midterm grade', weeks: 'Weeks 1–7' },
   POST: { name: 'Finals', grade: 'final', gradeLabel: 'Final grade', weeks: 'Weeks 8–13' },
 };
+
+const SHOW_LABEL = { scores: 'Scores', attendance: 'Attendance', midterm: 'Midterm grade', final: 'Final grade' };
+const SHOW_HINT = {
+  scores: 'Every quiz, activity and exam score',
+  attendance: 'Present, late and absent marks',
+  midterm: 'The computed midterm grade and its certificate',
+  final: 'The computed final grade and its certificate',
+};
+
+// What students can see of this class: the class itself, then each part on its own.
+function StudentView({ section, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => !ref.current?.contains(e.target) && setOpen(false);
+    const esc = (e) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  const show = section.show || { scores: true, attendance: true, midterm: false, final: false };
+  const shown = Object.keys(SHOW_LABEL).filter((k) => show[k]);
+  const summary = !section.published ? 'Hidden from students' : shown.length === 4 ? 'Students see everything' : shown.length ? `Students see ${shown.length} of 4` : 'Students see nothing yet';
+  return (
+    <div className="sv" ref={ref}>
+      <button type="button" className={`btn sv-btn ${section.published ? 'on' : ''}`} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <Icon name={section.published ? 'eye' : 'eyeOff'} size={16} /> {summary} <Icon name="chevronDown" size={14} />
+      </button>
+      {open && (
+        <div className="sv-pop" role="dialog" aria-label="What students can see">
+          <label className="sv-row sv-main">
+            <span><strong>Class visible to students</strong><small>Turn off to hide this whole class</small></span>
+            <input type="checkbox" checked={section.published} onChange={(e) => onChange({ published: e.target.checked })} />
+            <span className="switch-track" />
+          </label>
+          <div className={`sv-parts ${section.published ? '' : 'off'}`}>
+            <span className="sv-label">What they can see</span>
+            {Object.keys(SHOW_LABEL).map((k) => (
+              <label key={k} className="sv-row">
+                <span><strong>{SHOW_LABEL[k]}</strong><small>{SHOW_HINT[k]}</small></span>
+                <input type="checkbox" checked={!!show[k]} disabled={!section.published} onChange={(e) => onChange({ show: { [k]: e.target.checked } })} />
+                <span className="switch-track" />
+              </label>
+            ))}
+          </div>
+          <p className="sv-note">Students get a notification when a grade is released, and for new scores and attendance.</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SectionRecord() {
   const { id } = useParams();
@@ -105,7 +160,11 @@ export default function SectionRecord() {
   async function patchSection(body) {
     try {
       setData(await api(`/faculty/sections/${id}`, { method: 'PATCH', body }));
-      if ('published' in body) toast(body.published ? 'Grades are now visible to students' : 'Grades are hidden from students');
+      if ('published' in body) toast(body.published ? 'Students can now see this class' : 'This class is hidden from students');
+      else if ('show' in body) {
+        const [k, v] = Object.entries(body.show)[0];
+        toast(`${SHOW_LABEL[k]} ${v ? 'shown to' : 'hidden from'} students`);
+      }
       else toast('gradeScale' in body ? 'Percentages and grade scale saved' : 'Grade percentages saved');
     } catch (e) {
       toast(e.message, 'error');
@@ -189,11 +248,7 @@ export default function SectionRecord() {
         title={<>{section.code}{section.subjectTitle && <span className="thin">{titleCase(section.subjectTitle)}</span>}</>}
         actions={
           <>
-            <label className="switch">
-              <input type="checkbox" checked={section.published} onChange={(e) => patchSection({ published: e.target.checked }).catch(() => {})} />
-              <span className="switch-track" />
-              <span>{section.published ? 'Visible to students' : 'Hidden from students'}</span>
-            </label>
+            <StudentView section={section} onChange={(body) => patchSection(body).catch(() => {})} />
             <DownloadButton url={`/api/faculty/export?section=${encodeURIComponent(id)}`} title="This section's grading sheet in the class record format">
               Export
             </DownloadButton>

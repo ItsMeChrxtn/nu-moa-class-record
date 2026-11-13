@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api.js';
 import { Icon, titleCase, useUI } from './ui.jsx';
 
-const what = (n) => `${n.kind === 'midterm' ? 'Midterm' : 'Final'} grade`;
+// Title and icon for one notice.
+const TITLE = { midterm: 'Midterm grade released', final: 'Final grade released', score: 'New score', attendance: 'Attendance recorded' };
+const ICON = { midterm: 'chart', final: 'award', score: 'edit', attendance: 'calendar' };
+const subject = (n) => [n.section.code, n.section.subjectTitle && titleCase(n.section.subjectTitle)].filter(Boolean).join(' · ');
 const when = (d) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 // Students: a bell with their grade notices ("Your final grade for ACT264 is now available").
@@ -31,18 +34,10 @@ export default function NotificationBell() {
           const fresh = d.notifications.filter((n) => !n.read);
           if (fresh.length && !announced.current) {
             announced.current = true;
-            // One line per class: "ZZ999 · Advanced Web Programming: midterm and final grades"
-            const bySection = new Map();
-            for (const n of fresh) {
-              const key = n.section.id;
-              if (!bySection.has(key)) bySection.set(key, { s: n.section, kinds: [] });
-              bySection.get(key).kinds.push(n.kind === 'midterm' ? 'midterm' : 'final');
-            }
-            const lines = [...bySection.values()].map(({ s, kinds }) => {
-              const k = [...new Set(kinds)].sort((a) => (a === 'midterm' ? -1 : 1));
-              return `${s.code}${s.subjectTitle ? ` · ${titleCase(s.subjectTitle)}` : ''}: ${k.join(' and ')} grade${k.length > 1 ? 's' : ''}`;
-            });
-            toast(`${lines.join('\n')}\n\nYou can see ${fresh.length > 1 ? 'them' : 'it'} below. The bell keeps the list.`, 'info', 'Your grades are now available');
+            // The newest few in one pop-up: "ACT262 · Nov 13 · Present".
+            const lines = fresh.slice(0, 4).map((n) => `${n.section.code} · ${n.text || TITLE[n.kind] || 'Update'}`);
+            const more = fresh.length > 4 ? `\n…and ${fresh.length - 4} more in the bell.` : '';
+            toast(`${lines.join('\n')}${more}`, 'info', fresh.length === 1 ? TITLE[fresh[0].kind] || 'New update' : `${fresh.length} new updates in your classes`);
             // Shown once; the bell keeps the list.
             api('/me/notifications/read', { method: 'POST' }).catch(() => {});
           }
@@ -84,15 +79,15 @@ export default function NotificationBell() {
             <span>{list.length ? `${list.length} recent` : ''}</span>
           </div>
           {list.length === 0 ? (
-            <p className="bell-empty">Nothing yet. You&apos;ll be told here when your midterm or final grades are posted.</p>
+            <p className="bell-empty">Nothing yet. New scores, attendance and released grades show up here.</p>
           ) : (
             <ul>
               {list.map((n) => (
                 <li key={n.id} className={n.read ? '' : 'new'}>
-                  <span className={`bell-dot ${n.kind}`}><Icon name={n.kind === 'midterm' ? 'chart' : 'award'} size={15} /></span>
+                  <span className={`bell-dot ${n.kind}`}><Icon name={ICON[n.kind] || 'bell'} size={15} /></span>
                   <span className="bell-text">
-                    <strong>{what(n)} posted · {n.section.code}</strong>
-                    <small>{[n.section.subjectCode, n.section.subjectTitle && titleCase(n.section.subjectTitle)].filter(Boolean).join(' · ')}</small>
+                    <strong>{TITLE[n.kind] || 'Update'}{n.text ? `: ${n.text}` : ''}</strong>
+                    <small>{subject(n)}</small>
                     <time dateTime={n.at}>{when(n.at)}</time>
                   </span>
                   {!n.read && <span className="bell-new">New</span>}

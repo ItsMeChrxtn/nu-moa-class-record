@@ -31,7 +31,9 @@ export default function StudentRecords() {
   // Each class's latest grade: the final once finals items exist, else the midterm.
   const latest = records.map((r) => {
     const finals = r.section.gradingMode === 'final' || r.items.some((it) => termOf(it) === 'POST');
-    return { r, finals, g: finals ? r.grades.final : r.grades.midterm };
+    // The newest grade the instructor has released (final, else midterm); hidden when neither is.
+    const g = [finals && r.grades.final, r.section.gradingMode !== 'final' && r.grades.midterm].find((x) => x && !x.hidden) || { hidden: true, percent: null, equivalent: null };
+    return { r, finals: g === r.grades.final, g };
   });
   const withPct = latest.filter((x) => x.g.percent != null);
   const avg = withPct.length ? withPct.reduce((a, x) => a + x.g.percent, 0) / withPct.length : null;
@@ -45,19 +47,19 @@ export default function StudentRecords() {
         eyebrow={`Student · ${user.username}`}
         title={<>Hello, <span className="accent">{firstName(user.name)}</span></>}
         facts={records.length ? [{ label: 'Classes', value: records.length }, { label: 'Average', value: avg == null ? '—' : `${avg.toFixed(1)}%` }, { label: 'Attendance', value: attAll ? `${Math.round(((att.P + att.L) / attAll) * 100)}%` : '—' }] : []}
-        lead={records.length ? `${records.length} class${records.length === 1 ? '' : 'es'} with published grades` : 'Your grades will appear here once your faculty publishes them.'}
+        lead={records.length ? `${records.length} class${records.length === 1 ? '' : 'es'} with your scores` : 'Your grades will appear here once your faculty publishes them.'}
       />
       {records.length > 0 && (
         <>
           <div className="kpi-row">
-            <Stat tone="blue" icon="book" label="Classes" value={records.length} sub="with published grades" />
-            <Stat tone="gold" icon="chart" label="Average" value={<>{avg == null ? '—' : avg.toFixed(1)}<small>%</small></>} sub="latest grade per class" />
+            <Stat tone="blue" icon="book" label="Classes" value={records.length} sub="from your instructors" />
+            <Stat tone="gold" icon="chart" label="Average" value={avg == null ? <span className="stat-none">Not released yet</span> : <>{avg.toFixed(1)}<small>%</small></>} sub="released grades only" />
             <Stat tone="blue" icon="check" label="Attendance" value={<>{attAll ? Math.round(((att.P + att.L) / attAll) * 100) : '—'}<small>%</small></>} sub={`${att.A} absent · ${att.L} late`} />
             <Stat tone="gold" icon="award" label="Certificates" value={certs} sub="ready to download" />
           </div>
           <div className="dash-grid student-grid">
             <ChartCard className="dash-wide" title="My grades" sub="Latest grade per class, percent">
-              <BarRows series={['Grade']} threshold={60} thresholdLabel="Passing" rows={latest.map((x) => ({ label: x.r.section.code, sub: `${titleCase(x.r.section.subjectTitle || '')} · ${x.finals ? 'Final' : 'Midterm'} · GP ${x.g.equivalent ?? '—'}`, values: [x.g.percent] }))} />
+              <BarRows series={['Grade']} threshold={60} thresholdLabel="Passing" rows={latest.map((x) => ({ label: x.r.section.code, sub: x.g.hidden ? `${titleCase(x.r.section.subjectTitle || '')} · grade not released yet` : `${titleCase(x.r.section.subjectTitle || '')} · ${x.finals ? 'Final' : 'Midterm'} · GP ${x.g.equivalent ?? '—'}`, values: [x.g.percent] }))} />
             </ChartCard>
             <ChartCard title="Attendance" sub="All classes">
               {att.P + att.L + att.A + att.E ? (
@@ -77,17 +79,21 @@ export default function StudentRecords() {
             {records.length > 1 && (
               <div className="class-picker" role="tablist" aria-label="Your classes">
                 {records.map((r, i) => {
-                  // The latest grade: the final once finals items exist, else the midterm.
-                  const finals = r.items.some((it) => termOf(it) === 'POST');
-                  const g = finals ? r.grades.final : r.grades.midterm;
+                  const { g, finals } = latest[i];
                   return (
                     <button key={r.section.id} role="tab" aria-selected={r === record} onClick={() => setActive(i)}>
                       <span className="class-code">{r.section.code}</span>
                       <span className="class-subject">{titleCase(r.section.subjectTitle || r.section.subjectCode || '')}</span>
                       <span className="class-grade">
-                        <small>{finals ? 'Final' : 'Midterm'}</small>
-                        <strong>{fmtPct(g.percent)}</strong>
-                        <span className={`mini-gp ${eqTone(g.equivalent) === 'fail' ? 'fail' : ''}`}>GP {g.equivalent ?? '—'}</span>
+                        {g.hidden ? (
+                          <small className="class-hidden"><Icon name="lock" size={12} /> Grade not released yet</small>
+                        ) : (
+                          <>
+                            <small>{finals ? 'Final' : 'Midterm'}</small>
+                            <strong>{fmtPct(g.percent)}</strong>
+                            <span className={`mini-gp ${eqTone(g.equivalent) === 'fail' ? 'fail' : ''}`}>GP {g.equivalent ?? '—'}</span>
+                          </>
+                        )}
                       </span>
                     </button>
                   );
@@ -150,11 +156,11 @@ function Report({ record, user }) {
 
       {!finalOnly && <div className="term-tabs" role="tablist">
         <button role="tab" aria-selected={term === 'MID'} onClick={() => setView('MID')}>
-          Midterms <small>{fmtPct(grades.midterm.percent)}</small>
+          Midterms <small>{grades.midterm.hidden ? 'not released' : fmtPct(grades.midterm.percent)}</small>
         </button>
         {finalsOpen ? (
           <button role="tab" aria-selected={term === 'POST'} onClick={() => setView('POST')}>
-            Finals <small>{fmtPct(grades.final.percent)}</small>
+            Finals <small>{grades.final.hidden ? 'not released' : fmtPct(grades.final.percent)}</small>
           </button>
         ) : (
           <span className="tab-hint"><Icon name="lock" size={14} /> Finals opens once your faculty adds finals items</span>
@@ -174,6 +180,14 @@ function Report({ record, user }) {
 }
 
 function GradeTile({ label, grade, active, onClick }) {
+  if (grade.hidden)
+    return (
+      <button type="button" className={`grade-tile pending ${active ? 'active' : ''}`} onClick={onClick}>
+        <span className="grade-tile-label">{label}</span>
+        <Icon name="lock" size={22} />
+        <span className="pending-text">Not released yet</span>
+      </button>
+    );
   return (
     <button type="button" className={`grade-tile ${active ? 'active' : ''}`} onClick={onClick}>
       <span className="grade-tile-label">{label}</span>
@@ -199,11 +213,18 @@ function Scores({ record, term }) {
           <h3>{finalOnly ? 'Final grade' : t.name}</h3>
           <span className="sr-sub">{finalOnly ? 'Final only · no midterm' : t.weeks} · {t.parts.join(' · ')}</span>
         </div>
-        <span className="term-grade">
-          <strong>{fmtPct(grade.percent)}</strong>
-          <span className={`mini-gp ${eqTone(grade.equivalent) === 'fail' ? 'fail' : ''}`}>GP {grade.equivalent ?? '—'}</span>
-        </span>
+        {grade.hidden ? (
+          <span className="term-grade hidden-grade"><Icon name="lock" size={14} /> Grade not released yet</span>
+        ) : (
+          <span className="term-grade">
+            <strong>{fmtPct(grade.percent)}</strong>
+            <span className={`mini-gp ${eqTone(grade.equivalent) === 'fail' ? 'fail' : ''}`}>GP {grade.equivalent ?? '—'}</span>
+          </span>
+        )}
       </div>
+      {record.show && !record.show.scores && (
+        <p className="sr-hidden-note"><Icon name="lock" size={15} /> Your instructor hasn&apos;t released the scores for this class yet.</p>
+      )}
 
       {groups.map((g) => {
         const got = g.items.reduce((s, i) => s + (scores[i.id] ?? 0), 0);
@@ -247,8 +268,15 @@ function Scores({ record, term }) {
 
 // The term's grade as a sum: each component's share of its weight.
 function Computation({ record, term }) {
-  const rows = gradeBreakdown(record, term);
   const grade = term === 'MID' ? record.grades.midterm : record.grades.final;
+  if (grade.hidden)
+    return (
+      <section className="sr-card sr-calc">
+        <h4 className="sr-side-title"><Icon name="lock" size={16} /> {term === 'MID' ? 'Midterm' : 'Final'} grade</h4>
+        <p className="sr-hidden-note">Your instructor hasn&apos;t released this grade yet. Your scores are still shown, and the grade appears here once it&apos;s released.</p>
+      </section>
+    );
+  const rows = gradeBreakdown(record, term);
   return (
     <section className="sr-card sr-calc">
       <h4 className="sr-side-title"><Icon name="chart" size={16} /> How your {term === 'MID' ? 'midterm' : 'final'} grade adds up</h4>
@@ -291,12 +319,14 @@ function Certificates({ record, user, finalsOpen }) {
     }
     setBusy('');
   };
-  const row = (term, label, open, grade) => (
+  const row = (term, label, hasItems, grade) => {
+    const open = hasItems && !grade.hidden;
+    return (
     <div className={`sr-cert-row ${open ? '' : 'locked'}`}>
       <span className="sr-cert-seal"><Icon name={open ? 'award' : 'lock'} size={18} /></span>
       <span className="sr-cert-text">
         <strong>{label}</strong>
-        <small>{open ? `${fmtPct(grade.percent)} · GP ${grade.equivalent ?? '—'}` : 'Available once finals items are added'}</small>
+        <small>{open ? `${fmtPct(grade.percent)} · GP ${grade.equivalent ?? '—'}` : grade.hidden ? 'Available once the grade is released' : 'Available once finals items are added'}</small>
       </span>
       {open && (
         <button className="btn" disabled={!!busy} onClick={() => get(term)} aria-label={`Download the ${label.toLowerCase()}`}>
@@ -304,7 +334,8 @@ function Certificates({ record, user, finalsOpen }) {
         </button>
       )}
     </div>
-  );
+    );
+  };
   return (
     <section className="sr-card sr-certs">
       <h4 className="sr-side-title"><Icon name="award" size={16} /> Certificates</h4>

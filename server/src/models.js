@@ -110,6 +110,13 @@ const sectionSchema = new Schema(
       ],
     },
     published: { type: Boolean, default: false },
+    // What students see once published. Missing values: scores and attendance shown, grades hidden.
+    show: {
+      scores: Boolean,
+      attendance: Boolean,
+      midterm: Boolean,
+      final: Boolean,
+    },
     // 'both': midterm and final grades; 'final': the subject has a final grade only (no midterm).
     gradingMode: { type: String, enum: ['both', 'final'], default: 'both' },
   },
@@ -144,7 +151,10 @@ const notificationSchema = new Schema(
   {
     student: { type: Schema.Types.ObjectId, ref: 'Student', required: true },
     section: { type: Schema.Types.ObjectId, ref: 'Section', required: true },
-    kind: { type: String, enum: ['midterm', 'final'], required: true },
+    // 'midterm' | 'final' (grade released), 'score:<itemId>' (new score), 'att:<sessionId>' (attendance)
+    kind: { type: String, required: true },
+    text: String, // e.g. "Q1 · 17 / 25" or "Nov 13 · Present"
+    at: Date, // last change; newer score or mark moves it to the top again
     readAt: Date,
   },
   { timestamps: { createdAt: true, updatedAt: false } }
@@ -155,16 +165,44 @@ export const Notification = model('Notification', notificationSchema);
 
 // Tell every student in a published section which grades they can now see: the midterm once the
 // section has midterm items, the final once it has finals items (MPT counts as midterms, CPT as finals).
+// Visibility with defaults (scores and attendance on, grades off until the faculty turns them on).
+export function showOf(section) {
+  const s = section.show || {};
+  return { scores: s.scores !== false, attendance: s.attendance !== false, midterm: s.midterm === true, final: s.final === true };
+}
+
+// One notice per student for a new score or attendance mark; a later change updates the same notice.
+// list: [{ student, kind, text }]
+export async function notifyStudents(section, list) {
+  if (!section.published || !list.length) return;
+  const now = new Date();
+  try {
+    await Notification.bulkWrite(
+      list.map(({ student, kind, text }) => ({
+        updateOne: {
+          filter: { student, section: section._id, kind },
+          update: { $set: { text, at: now, readAt: null } },
+          upsert: true,
+        },
+      })),
+      { ordered: false }
+    );
+  } catch (e) {
+    console.error('notify failed:', e.message);
+  }
+}
+
 export async function notifyGrades(section) {
   if (!section.published) return 0;
+  const show = showOf(section);
   const items = section.items || [];
   const finals = items.some((i) => i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST'));
   const midterm = items.some((i) => !(i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST')));
   const finalOnly = section.gradingMode === 'final';
-  const kinds = finalOnly ? [items.length && 'final'].filter(Boolean) : [midterm && 'midterm', finals && 'final'].filter(Boolean);
+  const kinds = (finalOnly ? [items.length && 'final'] : [midterm && 'midterm', finals && 'final']).filter((k) => k && show[k]);
   if (!kinds.length) return 0;
   const enrollments = await Enrollment.find({ section: section._id }, 'student');
-  const docs = enrollments.flatMap((e) => kinds.map((kind) => ({ student: e.student, section: section._id, kind })));
+  const docs = enrollments.flatMap((e) => kinds.map((kind) => ({ student: e.student, section: section._id, kind, at: new Date() })));
   if (!docs.length) return 0;
   try {
     const r = await Notification.insertMany(docs, { ordered: false });

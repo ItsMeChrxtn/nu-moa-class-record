@@ -3,7 +3,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
-import { User, Student, Section, Enrollment, Notification, audit, notifyGrades } from './models.js';
+import { User, Student, Section, Enrollment, Notification, audit, notifyGrades, notifyStudents, showOf } from './models.js';
 import { COMPONENTS, DEFAULT_WEIGHTS, MARKS, attendanceItems, cleanScale, computeGrades, scaleOf } from './grading.js';
 import { saveCredentials } from './credentials.js';
 import { HHMM_RE as HHMM, blocksOutside, cleanBlocks, cleanSchedule, legacyFields, modeOf, workHoursOf } from './schedule.js';
@@ -200,15 +200,20 @@ router.get(
       .filter((e) => e.section?.published)
       .map((e) => {
         const s = e.section;
+        const show = showOf(s);
         // Attendance shows up as one "Attendance" item per period inside CP or EA.
-        const att = attendanceItems(s, e);
+        const att = show.attendance ? attendanceItems(s, e) : [];
+        const grades = computeGrades(s, e);
+        // Grades the faculty has not released yet never leave the server.
+        const hidden = { hidden: true, percent: null, equivalent: null };
         return {
           section: { ...sectionSummary(s), weights: s.weights, faculty: s.faculty?.name || null },
-          items: [...s.items.map(itemDto), ...att.map(attItemDto)],
-          scores: { ...Object.fromEntries(e.scores), ...Object.fromEntries(att.map((a) => [a._id, a.score])) },
-          attendance: attendanceSummary(s, e),
-          bonus: e.bonus,
-          grades: computeGrades(s, e),
+          show,
+          items: [...(show.scores ? s.items.map(itemDto) : []), ...att.map(attItemDto)],
+          scores: { ...(show.scores ? Object.fromEntries(e.scores) : {}), ...Object.fromEntries(att.map((a) => [a._id, a.score])) },
+          attendance: show.attendance ? attendanceSummary(s, e) : null,
+          bonus: show.scores ? e.bonus : 0,
+          grades: { ...grades, midterm: show.midterm ? grades.midterm : hidden, final: show.final ? grades.final : hidden },
         };
       });
     res.json({ records });
@@ -222,14 +227,24 @@ router.get(
   requirePasswordSet,
   requireRole('student'),
   wrap(async (req, res) => {
-    const list = await Notification.find({ student: req.user.student }).sort({ createdAt: -1 }).limit(30).populate('section', 'code subjectCode subjectTitle term academicYear published');
+    const list = await Notification.find({ student: req.user.student }).sort({ at: -1, createdAt: -1 }).limit(60).populate('section', 'code subjectCode subjectTitle term academicYear published show');
+    // A section hidden again, or a part of it hidden again, drops out.
+    const visible = (n) => {
+      if (!n.section?.published) return false;
+      const show = showOf(n.section);
+      if (n.kind.startsWith('score:')) return show.scores;
+      if (n.kind.startsWith('att:')) return show.attendance;
+      return Boolean(show[n.kind]);
+    };
     res.json({
       notifications: list
-        .filter((n) => n.section?.published) // a section hidden again drops out
+        .filter(visible)
+        .slice(0, 40)
         .map((n) => ({
           id: n._id,
-          kind: n.kind,
-          at: n.createdAt,
+          kind: n.kind.startsWith('score:') ? 'score' : n.kind.startsWith('att:') ? 'attendance' : n.kind,
+          text: n.text || null,
+          at: n.at || n.createdAt,
           read: !!n.readAt,
           section: { id: n.section._id, code: n.section.code, subjectCode: n.section.subjectCode, subjectTitle: n.section.subjectTitle, term: n.section.term, academicYear: n.section.academicYear },
         })),
@@ -353,7 +368,8 @@ faculty.patch(
   '/sections/:id',
   ownSection,
   wrap(async (req, res) => {
-    const { published, weights, details, gradeScale } = req.body || {};
+    const { published, weights, details, gradeScale, show } = req.body || {};
+    const before = showOf(req.section);
     // null resets to the NU default; an array sets this section's own scale.
     if (gradeScale !== undefined) {
       if (gradeScale === null) req.section.gradeScale = [];
@@ -379,6 +395,13 @@ faculty.patch(
       req.section.published = published;
       audit(req.user, published ? 'section.publish' : 'section.unpublish', sectionLabel(req.section));
     }
+    if (show && typeof show === 'object') {
+      const next = { ...before };
+      for (const k of ['scores', 'attendance', 'midterm', 'final']) if (typeof show[k] === 'boolean') next[k] = show[k];
+      req.section.show = next;
+      const changed = Object.keys(next).filter((k) => next[k] !== before[k]);
+      if (changed.length) audit(req.user, 'section.visibility', sectionLabel(req.section), changed.map((k) => `${k} ${next[k] ? 'shown' : 'hidden'}`).join(', '));
+    }
     if (weights) {
       const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
       req.section.weights = {
@@ -398,7 +421,8 @@ faculty.patch(
         return res.status(409).json({ error: `${req.section.code} already exists for ${req.section.term} ${req.section.academicYear}.` });
       throw e;
     }
-    if (published === true) await notifyGrades(req.section);
+    const after = showOf(req.section);
+    if (published === true || (after.midterm && !before.midterm) || (after.final && !before.final)) await notifyGrades(req.section);
     res.json(await sectionDetail(req.section));
   })
 );
@@ -434,6 +458,7 @@ faculty.delete(
       { section: req.section._id },
       { $unset: { [`scores.${req.params.itemId}`]: '' } }
     );
+    await Notification.deleteMany({ section: req.section._id, kind: `score:${req.params.itemId}` });
     res.json(await sectionDetail(req.section));
   })
 );
@@ -461,6 +486,14 @@ faculty.put(
       else enrollment.scores.set(String(itemId), value);
     }
     await enrollment.save();
+    if (showOf(req.section).scores) {
+      const kind = `score:${itemId}`;
+      if (value === null || (itemId === 'bonus' && !value)) await Notification.deleteOne({ student: studentId, section: req.section._id, kind });
+      else {
+        const item = itemId === 'bonus' ? null : req.section.items.id(itemId);
+        await notifyStudents(req.section, [{ student: enrollment.student, kind, text: item ? `${item.label} · ${value} / ${item.max}` : `Bonus · +${value}` }]);
+      }
+    }
     res.json({ grades: computeGrades(req.section, enrollment) });
   })
 );
@@ -946,8 +979,11 @@ faculty.post(
     att.sessions.sort((a, b) => a.date.localeCompare(b.date));
     await req.section.save();
     const session = att.sessions.find((s) => s.date === date && s.label === str(label, 40) && s.period === (period === 'POST' ? 'POST' : 'MID'));
-    if (MARKS.includes(markAll))
+    if (MARKS.includes(markAll)) {
       await Enrollment.updateMany({ section: req.section._id }, { $set: { [`attendance.${session._id}`]: markAll } });
+      const list = await Enrollment.find({ section: req.section._id }, 'student');
+      await notifyAttendance(req.section, session, list.map((e) => ({ student: e.student, mark: markAll })));
+    }
     res.json(await sectionDetail(req.section));
   })
 );
@@ -980,6 +1016,7 @@ faculty.delete(
     s.deleteOne();
     await req.section.save();
     await Enrollment.updateMany({ section: req.section._id }, { $unset: { [`attendance.${req.params.sid}`]: '' } });
+    await Notification.deleteMany({ section: req.section._id, kind: `att:${req.params.sid}` });
     audit(req.user, 'attendance.delete', sectionLabel(req.section), `session ${s.date}${s.label ? ` (${s.label})` : ''} and its marks`);
     res.json(await sectionDetail(req.section));
   })
@@ -991,16 +1028,21 @@ faculty.put(
   ownSection,
   wrap(async (req, res) => {
     const { sessionId, studentId, mark } = req.body || {};
-    if (!req.section.attendance?.sessions.id(sessionId)) return res.status(404).json({ error: 'Session not found' });
+    const session = req.section.attendance?.sessions.id(sessionId);
+    if (!session) return res.status(404).json({ error: 'Session not found' });
     if (mark !== null && !MARKS.includes(mark)) return res.status(400).json({ error: 'Invalid mark' });
     const key = `attendance.${sessionId}`;
     const update = mark === null ? { $unset: { [key]: '' } } : { $set: { [key]: mark } };
     if (!studentId) {
       await Enrollment.updateMany({ section: req.section._id }, update);
+      const list = await Enrollment.find({ section: req.section._id }, 'student');
+      await notifyAttendance(req.section, session, list.map((e) => ({ student: e.student, mark })));
       return res.json(await sectionDetail(req.section));
     }
     const enrollment = await Enrollment.findOneAndUpdate({ section: req.section._id, student: studentId }, update, { new: true });
     if (!enrollment) return res.status(404).json({ error: 'Student not in section' });
+    if (mark === null) await Notification.deleteOne({ student: enrollment.student, section: req.section._id, kind: `att:${sessionId}` });
+    else await notifyAttendance(req.section, session, [{ student: enrollment.student, mark }]);
     res.json({ grades: computeGrades(req.section, enrollment), attendance: attendanceSummary(req.section, enrollment) });
   })
 );
@@ -1009,6 +1051,14 @@ router.use('/faculty', faculty);
 router.use('/admin', admin);
 
 // ---------- helpers ----------
+
+const MARK_WORD = { P: 'Present', L: 'Late', A: 'Absent', E: 'Excused' };
+const shortDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+// Attendance notices for one session: [{ student, mark }]
+const notifyAttendance = (section, session, marks) =>
+  showOf(section).attendance
+    ? notifyStudents(section, marks.filter((m) => m.mark).map(({ student, mark }) => ({ student, kind: `att:${session._id}`, text: `${shortDate(session.date)}${session.label ? ` (${session.label})` : ''} · ${MARK_WORD[mark]}` })))
+    : null;
 
 const sectionLabel = (s) => [s.code, s.term, s.academicYear].filter(Boolean).join(' · ');
 
@@ -1090,6 +1140,7 @@ async function sectionDetail(section) {
     section: {
       ...sectionSummary(section),
       published: section.published,
+      show: showOf(section),
       weights: section.weights,
       attendance: attendanceDto(section),
       gradeScale: scaleOf(section),
