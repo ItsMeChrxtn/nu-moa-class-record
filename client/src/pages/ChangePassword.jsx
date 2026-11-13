@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
-import { Hero, Icon, firstName } from '../ui.jsx';
+import { Hero, Icon, firstName, useUI } from '../ui.jsx';
 
 export const LABELS = ['', 'Weak', 'Fair', 'Good', 'Strong'];
 
@@ -17,6 +17,7 @@ export function strength(pw) {
 }
 
 export default function ChangePassword() {
+  const { toast } = useUI();
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirm: '' });
@@ -42,8 +43,10 @@ export default function ChangePassword() {
       });
       setUser(d.user);
       navigate('/');
+      toast('Use your new password the next time you log in.', 'success', 'Password changed');
     } catch (err) {
       setError(err.message);
+      toast(err.message, 'error', 'Password not changed');
     } finally {
       setBusy(false);
     }
