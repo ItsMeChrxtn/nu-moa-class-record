@@ -353,6 +353,12 @@ export async function buildClassRecord(faculty, templatePath = TEMPLATE_PATH, fi
       const e = enrollments[i];
       const attScores = e ? Object.fromEntries(attendanceItems(sec, e).map((a) => [a._id, a.score])) : {};
       ws.set(`D${r}`, e ? e.student.studentNo : null);
+      // Student no., name and course as plain values. The template fills F:H with a FILTER formula
+      // that has no saved result, so older Excel, Protected View, phones and Google Sheets showed
+      // the names blank. Writing them in (this replaces the formula in row 13) works everywhere.
+      ws.set(`F${r}`, e ? e.student.studentNo : null);
+      ws.set(`G${r}`, e ? e.student.name : null);
+      ws.set(`H${r}`, e ? e.student.course || '' : null, { text: true });
       if (i >= TEMPLATE_ROWS) ws.set(`E${r}`, i + 1);
       for (const c of Object.values(SLOTS).flat()) ws.set(`${c}${r}`, null);
       for (const c of columns) ws.set(`${c.col}${r}`, e ? scoreFor(c, e, attScores) : null);
