@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { activity } from './api.js';
-import { Notes, PixelLoader, ProgressOverlay, SwalCard } from './Feedback.jsx';
+import { PixelLoader, ProgressOverlay, SwalCard, SweetAlert } from './Feedback.jsx';
 
 const paths = {
   logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
@@ -481,7 +481,7 @@ const UIContext = createContext(null);
 
 const MIN_RUN = 400; // ms the progress line stays at least, so it never just flickers
 const DONE_PAUSE = 200; // ms showing 100% before it fades
-const ALERT_MS = { success: 2600, info: 4500, error: 7000 }; // how long a notification stays
+const ALERT_MS = { success: 1900, info: 5000, error: 0, warning: 0 }; // success closes itself; errors wait for OK
 
 export function UIProvider({ children }) {
   const [alerts, setAlerts] = useState([]); // corner notifications
@@ -565,7 +565,7 @@ export function UIProvider({ children }) {
     <UIContext.Provider value={{ toast, confirm }}>
       {children}
       {progress && <ProgressOverlay progress={progress} />}
-      <Notes alerts={alerts} onClose={closeAlert} />
+      {!progress && alerts[0] && !dialog && <SweetAlert key={alerts[0].id} alert={alerts[0]} count={alerts.length} onClose={closeAlert} />}
       {dialog && <ConfirmDialog dialog={dialog} close={close} />}
     </UIContext.Provider>
   );

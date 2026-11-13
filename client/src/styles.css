@@ -2539,3 +2539,30 @@ code, kbd { background: var(--surface-2); border-color: var(--line-2); color: va
   .t2-week span { display: none; }
   .t2-week-strip { grid-template-columns: repeat(3, 1fr); }
 }
+/* ───────────── SweetAlert-style result popup ───────────── */
+@keyframes sa-in { 0% { opacity: 0; transform: scale(0.86); } 70% { transform: scale(1.03); } 100% { opacity: 1; transform: none; } }
+@keyframes sa-draw { to { stroke-dashoffset: 0; } }
+@keyframes sa-shake { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+@keyframes sa-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.sa-backdrop { position: fixed; inset: 0; z-index: 240; display: grid; place-items: center; padding: 16px; background: #0f173361; backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: fade 0.15s ease-out both; }
+.sa { position: relative; overflow: hidden; display: grid; justify-items: center; gap: 8px; width: min(400px, 100%); padding: 30px 28px 24px; text-align: center; background: var(--surface); border-radius: 20px; box-shadow: 0 30px 70px -24px #0f1733aa; animation: sa-in 0.32s cubic-bezier(.2,.9,.3,1.2) both; }
+.sa::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 5px; background: var(--sa); }
+.sa-success { --sa: #2f54eb; }
+.sa-error { --sa: #e5484d; }
+.sa-info { --sa: #2f54eb; }
+.sa-warning { --sa: #f5b100; }
+.sa-icon { width: 84px; height: 84px; margin-bottom: 4px; }
+.sa-icon svg { width: 100%; height: 100%; fill: none; stroke: var(--sa); stroke-linecap: round; stroke-linejoin: round; }
+.sa-ring { stroke-width: 4; opacity: 0.25; }
+.sa-mark { stroke-width: 6; stroke-dasharray: 80; stroke-dashoffset: 80; animation: sa-draw 0.45s 0.18s ease-out forwards; }
+.sa-icon-success { background: radial-gradient(circle, #e8eeff 0 58%, transparent 60%); border-radius: 50%; }
+.sa-icon-error { background: radial-gradient(circle, #fdeaec 0 58%, transparent 60%); border-radius: 50%; animation: sa-shake 0.4s 0.5s ease-in-out; }
+.sa-icon-info { background: radial-gradient(circle, #e8eeff 0 58%, transparent 60%); border-radius: 50%; }
+.sa-icon-warning { background: radial-gradient(circle, #fff4d6 0 58%, transparent 60%); border-radius: 50%; }
+.sa h2 { margin: 0; font-size: 1.35rem; font-weight: 800; letter-spacing: -0.02em; color: var(--ink); }
+.sa p { margin: 0; max-width: 34ch; font-size: 0.94rem; line-height: 1.5; color: var(--ink-2); white-space: pre-line; word-break: break-word; }
+.sa-ok { min-width: 130px; height: 44px; margin-top: 10px; }
+.sa-error .sa-ok { background: var(--red); box-shadow: 0 10px 22px -12px var(--red); }
+.sa-warning .sa-ok { background: var(--gold); color: #1a1300; box-shadow: 0 10px 22px -12px var(--gold); }
+.sa-timer { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--sa); transform-origin: left; animation: sa-timer linear forwards; opacity: 0.7; }
+@media (prefers-reduced-motion: reduce) { .sa, .sa-mark, .sa-icon-error { animation: none; } .sa-mark { stroke-dashoffset: 0; } }

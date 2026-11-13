@@ -94,3 +94,41 @@ export function Notes({ alerts, onClose }) {
     </div>
   );
 }
+
+// SweetAlert-style result popup in the middle of the screen: an animated icon, a title, the
+// message and an OK button. Success closes itself after a moment (with a timer bar); errors wait for OK.
+// alert: { id, type: 'success' | 'error' | 'info' | 'warning', title, message, duration }
+export function SweetAlert({ alert, onClose, count = 1 }) {
+  useEffect(() => {
+    if (alert.type !== 'success' && alert.type !== 'info') return;
+    const t = setTimeout(() => onClose(alert.id), alert.duration);
+    return () => clearTimeout(t);
+  }, [alert, onClose]);
+  useEffect(() => {
+    const key = (e) => (e.key === 'Escape' || e.key === 'Enter') && onClose(alert.id);
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [alert, onClose]);
+  const title = alert.title || { success: 'Done!', error: 'Something went wrong', info: 'Heads up', warning: 'Please check' }[alert.type] || 'Notice';
+  const msg = alert.message && alert.message !== title ? alert.message : null;
+  return (
+    <div className="sa-backdrop" onMouseDown={() => onClose(alert.id)}>
+      <div className={`sa sa-${alert.type}`} role={alert.type === 'error' ? 'alertdialog' : 'status'} aria-live="assertive" onMouseDown={(e) => e.stopPropagation()}>
+        <div className={`sa-icon sa-icon-${alert.type}`} aria-hidden="true">
+          <svg viewBox="0 0 80 80">
+            <circle className="sa-ring" cx="40" cy="40" r="36" />
+            {alert.type === 'success' && <path className="sa-mark" d="M24 41 L35 52 L57 29" />}
+            {alert.type === 'error' && <path className="sa-mark" d="M28 28 L52 52 M52 28 L28 52" />}
+            {(alert.type === 'info' || alert.type === 'warning') && <path className="sa-mark" d={alert.type === 'info' ? 'M40 36 L40 56 M40 25 L40 26' : 'M40 22 L40 46 M40 56 L40 57'} />}
+          </svg>
+        </div>
+        <h2>{title}</h2>
+        {msg && <p>{msg}</p>}
+        <button type="button" className="btn primary sa-ok" onClick={() => onClose(alert.id)} autoFocus>
+          OK{count > 1 ? ` (${count - 1} more)` : ''}
+        </button>
+        {(alert.type === 'success' || alert.type === 'info') && <span className="sa-timer" style={{ animationDuration: `${alert.duration}ms` }} />}
+      </div>
+    </div>
+  );
+}
