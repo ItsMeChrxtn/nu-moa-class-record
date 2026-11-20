@@ -699,6 +699,7 @@ faculty.get(
           email: e.student.email || null,
           status: accountStatus(u),
           sentAt: u?.credentialsSentAt || null,
+          viewable: !!u?.tempPasswordEnc, // the current temporary password can be shown again
           lastLoginAt: u?.lastLoginAt || null,
         };
       })
@@ -721,7 +722,7 @@ faculty.get(
       return res.status(409).json({ error: 'This student already signed in and set their own password.' });
     const pw = user.tempPasswordEnc && decryptTemp(user.tempPasswordEnc);
     if (!pw)
-      return res.status(404).json({ error: 'This temporary password was made before passwords could be viewed again. Reset the password to get a new one.' });
+      return res.status(410).json({ error: 'This temporary password was made before passwords could be viewed again. Make a new one to see it.' });
     audit(req.user, 'student.view-temp-password', `${user.name} (${user.username})`, sectionLabel(req.section));
     res.json({ username: user.username, tempPassword: pw });
   })

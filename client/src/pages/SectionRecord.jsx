@@ -207,16 +207,18 @@ export default function SectionRecord() {
     }
   }
 
-  async function resetPassword(student) {
+  async function resetPassword(student, ask = {}) {
     const ok = await confirm({
       title: 'Reset password?',
       message: `A new temporary password will be created for ${titleCase(student.name)}. This is their one account for all their classes, so their current password stops working everywhere.`,
       confirmLabel: 'Reset',
+      ...ask,
     });
     if (!ok) return;
     try {
       const d = await api(`/faculty/sections/${id}/students/${student.id}/reset-password`, { method: 'POST' });
       setResetInfo({ ...d, name: student.name });
+      api(`/faculty/sections/${id}`).then(setData).catch(() => {});
     } catch (e) {
       toast(e.message, 'error');
     }
@@ -228,6 +230,13 @@ export default function SectionRecord() {
       const d = await api(`/faculty/sections/${id}/students/${student.id}/temp-password`);
       setResetInfo({ ...d, name: student.name, viewed: true });
     } catch (e) {
+      // Made before passwords were kept: it cannot be shown, so offer a new one.
+      if (e.status === 410)
+        return resetPassword(student, {
+          title: 'Make a new temporary password?',
+          message: `${titleCase(student.name)}'s temporary password was made before passwords could be viewed again, so it cannot be shown. Make a new one? It is emailed when possible, and you can copy it here.`,
+          confirmLabel: 'Make new password',
+        });
       toast(e.message, 'error');
     }
   }

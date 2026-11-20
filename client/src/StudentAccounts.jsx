@@ -78,6 +78,26 @@ export function AccountsView({ section, query, setQuery, onChanged }) {
       toast(e.message, 'error');
     }
   }
+  // Older temporary passwords were never kept, so they cannot be shown: make a new one instead
+  // (emailed when the student has an email, and shown here either way).
+  async function renew(s) {
+    const ok = await confirm({
+      title: `New temporary password for ${s.name}?`,
+      message: `The old temporary password was made before passwords could be viewed again, so it cannot be shown. A new one replaces it${s.email && data.mailConfigured ? ` and is emailed to ${s.email}` : ''}; you can copy it here.`,
+      confirmLabel: 'Make new password',
+    });
+    if (!ok) return;
+    try {
+      const d = await api(`/faculty/sections/${section.id}/students/${s.id}/reset-password`, { method: 'POST', label: 'Making a new password…' });
+      setRevealed((r) => ({ ...r, [s.id]: d.tempPassword }));
+      toast(d.mail?.sent ? `New password emailed to ${d.email}` : 'New password ready: copy it and send it to the student', d.mail?.sent ? 'success' : 'info');
+      load();
+      onChanged?.();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
   const copy = (studentNo, pw) => navigator.clipboard.writeText(signInText(studentNo, pw)).then(() => toast('Sign-in details copied'));
 
   async function send() {
@@ -245,9 +265,15 @@ export function AccountsView({ section, query, setQuery, onChanged }) {
                                 <Icon name="copy" size={15} />
                               </button>
                             </span>
-                          ) : (
+                          ) : s.viewable ? (
                             <button className="btn btn-sm" onClick={() => reveal(s)}>
                               <Icon name="eye" size={14} /> Show
+                            </button>
+                          ) : s.shared ? (
+                            <span className="muted small">Issued in another class</span>
+                          ) : (
+                            <button className="btn btn-sm" title="The old password cannot be shown" onClick={() => renew(s)}>
+                              <Icon name="key" size={14} /> New password
                             </button>
                           )
                         ) : (
