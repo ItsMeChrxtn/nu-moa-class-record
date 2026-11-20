@@ -84,13 +84,21 @@ export default function SectionRecord() {
   const [panel, setPanel] = useState(null); // 'item' | 'weights' | 'students'
   const [resetInfo, setResetInfo] = useState(null);
   const [importResult, setImportResult] = useState(location.state?.result || null);
-  const [view, setView] = useState(null); // 'MID' | 'POST' | 'attendance' | 'accounts'; null = pick from the data
+  const [view, setView] = useState(location.state?.view || null); // 'MID' | 'POST' | 'attendance' | 'accounts'; null = pick from the data
 
   useEffect(() => {
     api(`/faculty/sections/${id}`).then(setData).catch((e) => setError(e.message));
     // Drop the one-time import result from history so a refresh doesn't show it again.
     if (location.state?.result) navigate(location.pathname, { replace: true, state: null });
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Opened from the faculty bell: go to that tab (also when already on this section).
+  useEffect(() => {
+    if (location.state?.view) {
+      setView(location.state.view);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const allItems = useMemo(() => (data ? sortItems(data.items) : []), [data]);
   // Finals opens once the midterms are graded (the Midterm Performance Task has scores),

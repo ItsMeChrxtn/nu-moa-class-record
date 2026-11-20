@@ -2587,3 +2587,10 @@ code, kbd { background: var(--surface-2); border-color: var(--line-2); color: va
 .sa-warning .sa-ok { background: var(--gold); color: #1a1300; box-shadow: 0 10px 22px -12px var(--gold); }
 .sa-timer { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--sa); transform-origin: left; animation: sa-timer linear forwards; opacity: 0.7; }
 @media (prefers-reduced-motion: reduce) { .sa, .sa-mark, .sa-icon-error { animation: none; } .sa-mark { stroke-dashoffset: 0; } }
+/* Faculty bell: student sign-ins per section */
+.bell-list li.bell-link { cursor: pointer; }
+.bell-list li.bell-link:hover { background: #f1f5f9; }
+.bell-list li.bell-link.new:hover { background: var(--blue-soft); filter: brightness(0.98); }
+.bell-dot.signin { background: var(--blue-soft); color: var(--blue); }
+.bell-progress { display: block; height: 5px; margin: 4px 0 2px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bell-progress span { display: block; height: 100%; border-radius: 3px; background: var(--teal); }

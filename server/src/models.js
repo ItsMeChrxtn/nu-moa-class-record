@@ -217,6 +217,40 @@ export async function notifyGrades(section) {
   }
 }
 
+// A faculty's notice that a student in one of their sections signed in for the first time
+// (set their own password). One per faculty, section and student.
+const facultyNoticeSchema = new Schema({
+  faculty: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  section: { type: Schema.Types.ObjectId, ref: 'Section', required: true },
+  student: { type: Schema.Types.ObjectId, ref: 'Student', required: true },
+  kind: { type: String, default: 'signin' },
+  at: { type: Date, default: Date.now },
+  readAt: Date,
+});
+facultyNoticeSchema.index({ faculty: 1, section: 1, student: 1, kind: 1 }, { unique: true });
+facultyNoticeSchema.index({ faculty: 1, at: -1 });
+export const FacultyNotice = model('FacultyNotice', facultyNoticeSchema);
+
+// Tell the faculty of every section the student is in that the student has signed in.
+export async function notifySignIn(user) {
+  if (user?.role !== 'student' || !user.student) return;
+  try {
+    const enrollments = await Enrollment.find({ student: user.student }, 'section').populate('section', 'faculty');
+    const ops = enrollments
+      .filter((e) => e.section?.faculty)
+      .map((e) => ({
+        updateOne: {
+          filter: { faculty: e.section.faculty, section: e.section._id, student: user.student, kind: 'signin' },
+          update: { $setOnInsert: { at: new Date() } },
+          upsert: true,
+        },
+      }));
+    if (ops.length) await FacultyNotice.bulkWrite(ops, { ordered: false });
+  } catch (e) {
+    console.error('faculty notice failed:', e.message);
+  }
+}
+
 export function audit(user, action, target, detail) {
   return AuditLog.create({
     actor: user?._id,

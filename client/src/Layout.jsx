@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { api } from './api.js';
 import { useAuth } from './auth.jsx';
-import NotificationBell from './Notifications.jsx';
+import NotificationBell, { FacultyBell } from './Notifications.jsx';
 import PhotoModal from './PhotoModal.jsx';
 import { Avatar, BrandMark, Icon, TodayChip, firstName, titleCase, useUI } from './ui.jsx';
 
@@ -143,6 +143,7 @@ export default function Layout() {
               <div className="topbar-user">
                 {nav && <span className="hide-sm"><TodayChip /></span>}
                 {user.role === 'student' && ready && <NotificationBell />}
+                {user.role === 'faculty' && ready && <FacultyBell />}
                 <UserMenu user={user} onPhoto={() => setPhotoOpen(true)} onLogout={doLogout} />
               </div>
             )}

@@ -3,7 +3,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
-import { User, Student, Section, Enrollment, Notification, audit, notifyGrades, notifyStudents, showOf } from './models.js';
+import { User, Student, Section, Enrollment, Notification, FacultyNotice, audit, notifyGrades, notifySignIn, notifyStudents, showOf } from './models.js';
 import { COMPONENTS, DEFAULT_WEIGHTS, MARKS, attendanceItems, cleanScale, computeGrades, scaleOf } from './grading.js';
 import { saveCredentials } from './credentials.js';
 import { HHMM_RE as HHMM, blocksOutside, cleanBlocks, cleanSchedule, legacyFields, modeOf, workHoursOf } from './schedule.js';
@@ -70,12 +70,14 @@ router.post(
       return res.status(400).json({ error: 'The new password must be at least 8 characters.' });
     if (newPassword === currentPassword)
       return res.status(400).json({ error: 'The new password must be different from the current one.' });
+    const firstSignIn = req.user.mustChangePassword;
     req.user.passwordHash = await hashPassword(newPassword);
     req.user.mustChangePassword = false;
     req.user.tempPasswordEnc = undefined;
     req.user.resetTokenHash = undefined; // an emailed reset link stops working once the password changes
     req.user.resetTokenExpires = undefined;
     await req.user.save();
+    if (firstSignIn) await notifySignIn(req.user); // the student's faculty see it in their bell
     res.json({ user: publicUser(req.user) });
   })
 );
@@ -154,12 +156,14 @@ router.post(
     if (!user) return res.status(400).json({ error: 'This reset link is invalid or has expired. Please ask for a new one.' });
     if (typeof newPassword !== 'string' || newPassword.length < 8)
       return res.status(400).json({ error: 'The new password must be at least 8 characters.' });
+    const firstSignIn = user.mustChangePassword;
     user.passwordHash = await hashPassword(newPassword);
     user.mustChangePassword = false;
     user.tempPasswordEnc = undefined;
     user.resetTokenHash = undefined;
     user.resetTokenExpires = undefined;
     await user.save();
+    if (firstSignIn) await notifySignIn(user);
     audit(user, 'auth.reset-password', `${user.name} (${user.username})`, 'new password set from the emailed link');
     res.json({ ok: true, username: user.username });
   })
@@ -270,6 +274,50 @@ router.post(
 
 const faculty = express.Router();
 faculty.use(requireAuth, requirePasswordSet, requireRole('faculty'));
+
+// Faculty bell: which students signed in, grouped by section, newest first, with each section's
+// sign-in count (e.g. 18 of 30).
+faculty.get(
+  '/notifications',
+  wrap(async (req, res) => {
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const notices = await FacultyNotice.find({ faculty: req.user._id, at: { $gte: since } })
+      .sort({ at: -1 })
+      .limit(300)
+      .populate('student', 'name studentNo')
+      .populate('section', 'code subjectTitle faculty');
+    const groups = new Map();
+    for (const n of notices) {
+      // Skip sections that were deleted or moved to another faculty, and removed students.
+      if (!n.section || !n.student || String(n.section.faculty) !== String(req.user._id)) continue;
+      const key = String(n.section._id);
+      if (!groups.has(key)) groups.set(key, { section: { id: n.section._id, code: n.section.code, subjectTitle: n.section.subjectTitle }, students: [], unread: 0, at: n.at });
+      const g = groups.get(key);
+      g.students.push({ name: n.student.name, studentNo: n.student.studentNo, at: n.at, read: !!n.readAt });
+      if (!n.readAt) g.unread++;
+    }
+    // Sign-in count per section.
+    const list = [...groups.values()];
+    const sectionIds = list.map((g) => g.section.id);
+    const enrollments = await Enrollment.find({ section: { $in: sectionIds } }, 'section student');
+    const active = new Set(
+      (await User.find({ student: { $in: enrollments.map((e) => e.student) }, role: 'student', mustChangePassword: false }, 'student')).map((u) => String(u.student))
+    );
+    for (const g of list) {
+      const mine = enrollments.filter((e) => String(e.section) === String(g.section.id));
+      g.total = mine.length;
+      g.signedIn = mine.filter((e) => active.has(String(e.student))).length;
+    }
+    res.json({ groups: list });
+  })
+);
+faculty.post(
+  '/notifications/read',
+  wrap(async (req, res) => {
+    await FacultyNotice.updateMany({ faculty: req.user._id, readAt: null }, { $set: { readAt: new Date() } });
+    res.json({ ok: true });
+  })
+);
 
 // Weekly blocks besides classes (consultation hours, meetings…), for the weekly schedule.
 faculty.get('/schedule-blocks', wrap(async (req, res) => res.json({ blocks: req.user.scheduleBlocks || [], workHours: workHoursOf(req.user) })));
@@ -814,6 +862,7 @@ faculty.delete(
   wrap(async (req, res) => {
     const { deletedCount } = await Enrollment.deleteMany({ section: req.section._id });
     await req.section.deleteOne();
+    await FacultyNotice.deleteMany({ section: req.section._id });
     audit(req.user, 'section.delete', sectionLabel(req.section), `${deletedCount} enrollments and ${req.section.items.length} items removed`);
     res.json({ ok: true, removedEnrollments: deletedCount });
   })
@@ -826,6 +875,7 @@ faculty.delete(
   wrap(async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.studentId)) return res.status(404).json({ error: 'Not found' });
     const enrollment = await Enrollment.findOneAndDelete({ section: req.section._id, student: req.params.studentId }).populate('student');
+    await FacultyNotice.deleteMany({ section: req.section._id, student: req.params.studentId });
     if (enrollment)
       audit(req.user, 'student.remove', `${enrollment.student?.name} (${enrollment.student?.studentNo})`, sectionLabel(req.section));
     res.json(await sectionDetail(req.section));
