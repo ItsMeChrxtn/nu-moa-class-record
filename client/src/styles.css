@@ -2594,3 +2594,11 @@ code, kbd { background: var(--surface-2); border-color: var(--line-2); color: va
 .bell-dot.signin { background: var(--blue-soft); color: var(--blue); }
 .bell-progress { display: block; height: 5px; margin: 4px 0 2px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .bell-progress span { display: block; height: 100%; border-radius: 3px; background: var(--teal); }
+/* Page loader, larger */
+.ld { gap: 20px; }
+.ld-mark { width: 96px; height: 96px; border-radius: 22px; }
+.ld-mark .brand-logo { width: 60px; height: 60px; }
+.ld-mark .brand-mark { width: 44px; height: 44px; }
+.ld-bar { width: 240px; height: 6px; border-radius: 3px; }
+.ld-bar i { border-radius: 3px; }
+.ld-label { font-size: 0.95rem; }
