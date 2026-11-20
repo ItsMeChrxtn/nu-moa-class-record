@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api.js';
-import { Avatar, Icon, Modal, PageLoader, useUI } from './ui.jsx';
+import { Avatar, EmptyState, Icon, PageLoader, useUI } from './ui.jsx';
 
 export const ACCOUNT_LABEL = {
   none: 'No account',
@@ -17,18 +17,59 @@ function downloadCsv(filename, rows) {
   URL.revokeObjectURL(url);
 }
 
-// Create student accounts for a section and email each student their temporary password.
-export function StudentAccountsModal({ section, onClose, onDone }) {
-  const { toast } = useUI();
+const signInText = (studentNo, pw) => `Student number: ${studentNo}\nTemporary password: ${pw}`;
+const shortDate = (d) => (d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
+
+// A student can get a temporary password unless they already signed in, or their account
+// (and its password) came from another faculty's class.
+const canSend = (s) => s.status !== 'active' && !s.shared;
+
+// "Accounts" tab of a section: every student's sign-in status. The faculty ticks who should get a
+// temporary password; it is emailed when possible and shown here otherwise.
+export function AccountsView({ section, query, setQuery, onChanged }) {
+  const { toast, confirm } = useUI();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-  const [resend, setResend] = useState(false);
-  const [includeNoEmail, setIncludeNoEmail] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [revealed, setRevealed] = useState({}); // student id -> temporary password, shown on request
 
-  // For when the email never arrived: show the current temporary password so it can be sent another way.
+  const load = () => api(`/faculty/sections/${section.id}/accounts`).then(setData).catch((e) => setError(e.message));
+  useEffect(() => {
+    load();
+  }, [section.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const q = query.trim().toLowerCase();
+  const rows = useMemo(
+    () => (data ? data.students.filter((s) => `${s.name} ${s.studentNo} ${s.email || ''}`.toLowerCase().includes(q)) : []),
+    [data, q]
+  );
+  const selectable = rows.filter(canSend);
+  const allOn = selectable.length > 0 && selectable.every((s) => selected.has(s.id));
+
+  if (error) return <div className="alert error"><Icon name="alert" />{error}</div>;
+  if (!data) return <div className="card"><PageLoader /></div>;
+
+  const count = (k) => data.students.filter((s) => s.status === k).length;
+  const toggle = (id) =>
+    setSelected((cur) => {
+      const next = new Set(cur);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const pick = (test) => setSelected(new Set(data.students.filter((s) => canSend(s) && test(s)).map((s) => s.id)));
+  const toggleAll = () =>
+    setSelected((cur) => {
+      const next = new Set(cur);
+      for (const s of selectable) allOn ? next.delete(s.id) : next.add(s.id);
+      return next;
+    });
+
+  const chosen = data.students.filter((s) => selected.has(s.id));
+  const byEmail = chosen.filter((s) => data.mailConfigured && s.email).length;
+  const replacing = chosen.filter((s) => s.status !== 'none').length;
+
   async function reveal(s) {
     try {
       const d = await api(`/faculty/sections/${section.id}/students/${s.id}/temp-password`);
@@ -37,91 +78,68 @@ export function StudentAccountsModal({ section, onClose, onDone }) {
       toast(e.message, 'error');
     }
   }
-
-  const copyDetails = (s, pw) =>
-    navigator.clipboard.writeText(`Student number: ${s.studentNo}\nTemporary password: ${pw}`).then(() => toast('Sign-in details copied'));
-
-  useEffect(() => {
-    api(`/faculty/sections/${section.id}/accounts`).then(setData).catch((e) => setError(e.message));
-  }, [section.id]);
-
-  // Same rules as the server, so the button says exactly how many will be sent.
-  const plan = useMemo(() => {
-    if (!data) return null;
-    const p = { email: 0, show: 0, active: 0, shared: 0, sent: 0, noEmail: 0 };
-    for (const s of data.students) {
-      if (s.status === 'active') p.active++;
-      else if (s.shared) p.shared++;
-      else if (s.status === 'sent' && !resend) p.sent++;
-      else if (data.mailConfigured && s.email) p.email++;
-      else if (includeNoEmail) p.show++;
-      else p.noEmail++;
-    }
-    return p;
-  }, [data, resend, includeNoEmail]);
+  const copy = (studentNo, pw) => navigator.clipboard.writeText(signInText(studentNo, pw)).then(() => toast('Sign-in details copied'));
 
   async function send() {
+    const parts = [
+      byEmail && `${byEmail} will get it by email`,
+      chosen.length - byEmail && `${chosen.length - byEmail} will be shown here for you to hand out`,
+    ].filter(Boolean);
+    const ok = await confirm({
+      title: `Send a temporary password to ${chosen.length} student${chosen.length === 1 ? '' : 's'}?`,
+      message: `${parts.join(', ')}.${replacing ? ` ${replacing} already ha${replacing === 1 ? 's' : 've'} a temporary password; it will be replaced with a new one.` : ''}`,
+      confirmLabel: 'Send',
+    });
+    if (!ok) return;
     setBusy(true);
-    setError('');
     try {
-      const d = await api(`/faculty/sections/${section.id}/accounts/send`, { method: 'POST', body: { resend, includeNoEmail } });
+      const d = await api(`/faculty/sections/${section.id}/accounts/send`, {
+        method: 'POST',
+        body: { studentIds: chosen.map((s) => s.id) },
+        label: 'Sending temporary passwords…',
+      });
       setResult(d.result);
-      onDone?.();
+      setSelected(new Set());
+      setRevealed({});
+      const handOut = d.result.shown.length + d.result.failed.filter((f) => f.tempPassword).length;
+      if (d.result.sent) toast(`${d.result.sent} emailed${handOut ? `, ${handOut} to hand out` : ''}`);
+      else if (handOut) toast(`${handOut} password${handOut === 1 ? '' : 's'} to hand out`, 'info');
+      load();
+      onChanged?.();
     } catch (e) {
-      setError(e.message);
+      toast(e.message, 'error');
     } finally {
       setBusy(false);
     }
   }
 
-  if (result) {
-    const handOut = [...result.shown, ...result.failed.filter((f) => f.tempPassword)];
-    return (
-      <Modal
-        title="Accounts sent"
-        subtitle={section.code}
-        icon="check"
-        tone="high"
-        onClose={onClose}
-        width={640}
-        footer={
-          <>
-            {handOut.length > 0 && (
-              <button className="btn" onClick={() => downloadCsv(`student-accounts-${section.code}.csv`, handOut)}>
-                <Icon name="download" size={16} /> Download passwords (CSV)
-              </button>
-            )}
-            <button className="btn primary" onClick={onClose}>Done</button>
-          </>
-        }
-      >
-        <div className="result-stats">
-          <div><strong>{result.sent}</strong><span>emailed</span></div>
-          <div><strong>{handOut.length}</strong><span>to hand out</span></div>
-          <div><strong>{result.skippedActive + result.skippedShared + result.skippedSent + result.skippedNoEmail}</strong><span>skipped</span></div>
-        </div>
-        {result.sent > 0 && (
-          <div className="alert ok"><Icon name="check" />{result.sent} student{result.sent === 1 ? '' : 's'} got their student number and temporary password by email.</div>
-        )}
-        {(result.skippedActive > 0 || result.skippedShared > 0 || result.skippedSent > 0 || result.skippedNoEmail > 0) && (
-          <div className="alert info">
-            <Icon name="info" />
-            <span>
-              Skipped: {[
-                result.skippedActive && `${result.skippedActive} already signed in`,
-                result.skippedShared && `${result.skippedShared} with an account from another class (password not changed)`,
-                result.skippedSent && `${result.skippedSent} already emailed`,
-                result.skippedNoEmail && `${result.skippedNoEmail} without email`,
-              ].filter(Boolean).join(', ')}.
-            </span>
+  const handOut = result ? [...result.shown, ...result.failed.filter((f) => f.tempPassword)] : [];
+
+  return (
+    <>
+      {result && (
+        <div className="card acct-result">
+          <div className="acct-result-head">
+            <div>
+              <strong>Sent</strong>
+              <span>
+                {result.sent} emailed · {handOut.length} to hand out
+                {result.failed.length > 0 && ` · ${result.failed.length} email${result.failed.length === 1 ? '' : 's'} failed`}
+              </span>
+            </div>
+            <div className="toolbar-right">
+              {handOut.length > 0 && (
+                <button className="btn" onClick={() => downloadCsv(`student-accounts-${section.code}.csv`, handOut)}>
+                  <Icon name="download" size={16} /> Download CSV
+                </button>
+              )}
+              <button className="icon-btn" title="Close" onClick={() => setResult(null)}><Icon name="x" size={16} /></button>
+            </div>
           </div>
-        )}
-        {result.failed.length > 0 && (
-          <div className="alert error"><Icon name="alert" /><span>{result.failed.length} email{result.failed.length === 1 ? '' : 's'} could not be sent: {[...new Set(result.failed.map((f) => f.error))].join('; ')}</span></div>
-        )}
-        {handOut.length > 0 && (
-          <>
-            <p className="muted small">Give these students their password yourself. You can view each one again from Student accounts until the student signs in.</p>
+          {result.failed.length > 0 && (
+            <div className="alert error"><Icon name="alert" /><span>Could not email: {[...new Set(result.failed.map((f) => f.error))].join('; ')}. Give these students the password below.</span></div>
+          )}
+          {handOut.length > 0 && (
             <div className="cred-table">
               {handOut.map((c) => (
                 <div key={c.studentNo} className="cred-line">
@@ -130,115 +148,120 @@ export function StudentAccountsModal({ section, onClose, onDone }) {
                     <span>{c.studentNo}{c.email ? ` · ${c.email}` : ''}</span>
                   </div>
                   <code>{c.tempPassword}</code>
-                  <button className="icon-btn" title="Copy" onClick={() => navigator.clipboard.writeText(`${c.studentNo} / ${c.tempPassword}`).then(() => toast('Copied'))}>
+                  <button className="icon-btn" title="Copy sign-in details" onClick={() => copy(c.studentNo, c.tempPassword)}>
                     <Icon name="copy" size={15} />
                   </button>
                 </div>
               ))}
             </div>
-          </>
-        )}
-      </Modal>
-    );
-  }
-
-  const total = plan ? plan.email + plan.show : 0;
-  return (
-    <Modal
-      title="Student accounts"
-      subtitle="Create accounts for this section and email each student their student number and temporary password."
-      icon="mail"
-      onClose={onClose}
-      width={680}
-      footer={
-        data && (
-          <>
-            <span className="foot-note muted small">
-              {plan.email > 0 && `${plan.email} by email`}
-              {plan.email > 0 && plan.show > 0 && ' · '}
-              {plan.show > 0 && `${plan.show} shown here`}
-              {total === 0 && 'Nothing to send'}
-            </span>
-            <button className="btn" onClick={onClose}>Cancel</button>
-            <button className="btn primary" disabled={busy || total === 0} onClick={send}>
-              <Icon name="mail" size={16} />
-              {busy ? 'Sending…' : `Create & send ${total} account${total === 1 ? '' : 's'}`}
-            </button>
-          </>
-        )
-      }
-    >
-      {error && <div className="alert error"><Icon name="alert" />{error}</div>}
-      {!data ? (
-        <PageLoader />
-      ) : (
-        <>
-          {!data.mailConfigured && (
-            <div className="alert error"><Icon name="alert" />Email is not set up on the server, so passwords can only be shown here.</div>
           )}
-          <div className="acct-summary">
-            {['none', 'temp', 'sent', 'active'].map((k) => (
-              <span key={k} className={`acct-chip acct-${k}`}>
-                <i />{ACCOUNT_LABEL[k]} <strong>{data.students.filter((s) => s.status === k).length}</strong>
-              </span>
-            ))}
-            <span className="acct-chip">
-              <Icon name="mail" size={13} /> With email <strong>{data.students.filter((s) => s.email).length}</strong>
-            </span>
-          </div>
-
-          {plan.shared > 0 && (
-            <div className="alert info">
-              <Icon name="info" />
-              <span>
-                <strong>{plan.shared} student{plan.shared === 1 ? ' already has' : 's already have'} an account from another class.</strong> They keep the same sign-in and their password is not changed. This section appears on their account once you show its grades.
-              </span>
-            </div>
-          )}
-
-          <div className="acct-list">
-            {data.students.map((s) => (
-              <div key={s.id} className="acct-row">
-                <Avatar name={s.name} size={28} />
-                <div className="roster-info">
-                  <strong>{s.name}</strong>
-                  <span>{s.studentNo} · {s.email || <em className="no-mail">no email</em>}</span>
-                </div>
-                <span className={`acct-chip acct-${s.status}`}><i />{s.shared ? 'From another class' : ACCOUNT_LABEL[s.status]}</span>
-                {(s.status === 'temp' || s.status === 'sent') && (
-                  revealed[s.id] ? (
-                    <span className="acct-pw">
-                      <code>{revealed[s.id]}</code>
-                      <button className="icon-btn" title="Copy sign-in details" onClick={() => copyDetails(s, revealed[s.id])}>
-                        <Icon name="copy" size={15} />
-                      </button>
-                    </span>
-                  ) : (
-                    <button className="icon-btn" title="View temporary password" onClick={() => reveal(s)}>
-                      <Icon name="eye" size={15} />
-                    </button>
-                  )
-                )}
-              </div>
-            ))}
-          </div>
-
-          <label className="check">
-            <input type="checkbox" checked={resend} onChange={(e) => setResend(e.target.checked)} />
-            <span>
-              <strong>Resend to students already emailed</strong>
-              <small>They get a new temporary password. Students who already signed in, or got their account from another class, are never changed.</small>
-            </span>
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={includeNoEmail} onChange={(e) => setIncludeNoEmail(e.target.checked)} />
-            <span>
-              <strong>Also create accounts for students without email</strong>
-              <small>Their passwords are shown here for you to hand out. To email them instead, re-import a class list with emails (Students button).</small>
-            </span>
-          </label>
-        </>
+        </div>
       )}
-    </Modal>
+
+      <div className="card table-card">
+        <div className="table-toolbar">
+          <div className="toolbar-title">
+            <strong>Student accounts</strong>
+            <span>
+              {count('active')} signed in · {count('sent')} emailed · {count('temp')} not emailed · {count('none')} no account
+            </span>
+          </div>
+          <div className="toolbar-right">
+            <span className="input-icon">
+              <Icon name="search" />
+              <input placeholder="Search by name, ID number or email…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            </span>
+            <button className="btn primary" disabled={busy || chosen.length === 0} onClick={send}>
+              <Icon name="mail" size={16} />
+              {busy ? 'Sending…' : chosen.length ? `Send password to ${chosen.length}` : 'Send password'}
+            </button>
+          </div>
+        </div>
+        <div className="toolbar-meta table-meta acct-pick">
+          <span>Select:</span>
+          <button className="link-btn" onClick={() => pick((s) => s.status === 'none')}>No account</button>
+          <button className="link-btn" onClick={() => pick((s) => s.status === 'temp')}>Not emailed</button>
+          <button className="link-btn" onClick={() => pick((s) => s.status === 'sent')}>Emailed, not signed in</button>
+          <button className="link-btn" onClick={() => pick(() => true)}>All not signed in</button>
+          {selected.size > 0 && <button className="link-btn" onClick={() => setSelected(new Set())}>Clear ({selected.size})</button>}
+          {!data.mailConfigured && <span className="no-mail">Email is not set up on the server: passwords are shown here instead.</span>}
+        </div>
+
+        {rows.length === 0 ? (
+          <EmptyState icon="users" title={data.students.length ? 'No match' : 'No students yet'}>
+            {data.students.length ? 'No student matches your search.' : 'Import the class list first.'}
+          </EmptyState>
+        ) : (
+          <div className="table-wrap">
+            <table className="acct-table">
+              <thead>
+                <tr>
+                  <th className="acct-check">
+                    <input type="checkbox" checked={allOn} disabled={!selectable.length} onChange={toggleAll} title="Select all shown" />
+                  </th>
+                  <th>Student</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th>Temporary password</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((s) => {
+                  const on = selected.has(s.id);
+                  return (
+                    <tr key={s.id} className={on ? 'on' : ''} onClick={() => canSend(s) && toggle(s.id)}>
+                      <td className="acct-check">
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          disabled={!canSend(s)}
+                          title={s.status === 'active' ? 'Already signed in' : s.shared ? 'Account from another class' : ''}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => toggle(s.id)}
+                        />
+                      </td>
+                      <td>
+                        <div className="acct-who">
+                          <Avatar name={s.name} size={28} />
+                          <div className="roster-info">
+                            <strong>{s.name}</strong>
+                            <span>{s.studentNo}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td>{s.email || <em className="no-mail">no email</em>}</td>
+                      <td>
+                        <span className={`acct-chip acct-${s.status}`}><i />{s.shared ? 'From another class' : ACCOUNT_LABEL[s.status]}</span>
+                        <small className="acct-when">
+                          {s.status === 'active' ? s.lastLoginAt && `Last sign-in ${shortDate(s.lastLoginAt)}` : s.status === 'sent' && s.sentAt && `Emailed ${shortDate(s.sentAt)}`}
+                        </small>
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        {s.status === 'temp' || s.status === 'sent' ? (
+                          revealed[s.id] ? (
+                            <span className="acct-pw">
+                              <code>{revealed[s.id]}</code>
+                              <button className="icon-btn" title="Copy sign-in details" onClick={() => copy(s.studentNo, revealed[s.id])}>
+                                <Icon name="copy" size={15} />
+                              </button>
+                            </span>
+                          ) : (
+                            <button className="btn btn-sm" onClick={() => reveal(s)}>
+                              <Icon name="eye" size={14} /> Show
+                            </button>
+                          )
+                        ) : (
+                          <span className="muted small">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

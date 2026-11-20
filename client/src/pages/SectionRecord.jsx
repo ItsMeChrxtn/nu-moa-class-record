@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, COMPONENTS, PERIODS, TERM_COMPONENTS, fmt, groupItems, roomLabel, schedule, sortItems, termOf } from '../api.js';
 import { AddStudentsModal, ImportResultModal, deleteSection } from '../Roster.jsx';
 import { EditSectionModal } from '../SectionForm.jsx';
-import { ACCOUNT_LABEL, StudentAccountsModal } from '../StudentAccounts.jsx';
+import { ACCOUNT_LABEL, AccountsView } from '../StudentAccounts.jsx';
 import { BarRows, ChartCard, ChartEmpty, Columns, Line } from '../Charts.jsx';
 import { AttendanceView } from '../Attendance.jsx';
 import { Avatar, DownloadButton, EmptyState, EqBadge, ErrorState, Hero, Icon, Menu, Modal, PageLoader, titleCase, useUI } from '../ui.jsx';
@@ -84,7 +84,7 @@ export default function SectionRecord() {
   const [panel, setPanel] = useState(null); // 'item' | 'weights' | 'students'
   const [resetInfo, setResetInfo] = useState(null);
   const [importResult, setImportResult] = useState(location.state?.result || null);
-  const [view, setView] = useState(null); // 'MID' | 'POST' | 'attendance'; null = pick from the data
+  const [view, setView] = useState(null); // 'MID' | 'POST' | 'attendance' | 'accounts'; null = pick from the data
 
   useEffect(() => {
     api(`/faculty/sections/${id}`).then(setData).catch((e) => setError(e.message));
@@ -104,8 +104,8 @@ export default function SectionRecord() {
     return mptScored || data.items.some((it) => !it.virtual && termOf(it) === 'POST');
   }, [data]);
   // With no choice made yet, open the latest term that is open.
-  const tab = view === 'attendance' ? 'attendance' : finalOnly || (finalsOpen && view !== 'MID') ? 'POST' : 'MID';
-  const term = tab === 'attendance' ? 'MID' : tab;
+  const tab = view === 'attendance' || view === 'accounts' ? view : finalOnly || (finalsOpen && view !== 'MID') ? 'POST' : 'MID';
+  const term = tab === 'MID' || tab === 'POST' ? tab : finalOnly || finalsOpen ? 'POST' : 'MID';
   const items = useMemo(() => (finalOnly ? allItems : allItems.filter((it) => termOf(it) === term)), [allItems, term, finalOnly]);
   const groups = useMemo(() => groupItems(items), [items]);
   // First item of each component group gets a vertical rule.
@@ -156,6 +156,7 @@ export default function SectionRecord() {
   const { section } = data;
   const q = query.trim().toLowerCase();
   const rows = data.rows.filter((r) => `${r.student.name} ${r.student.studentNo}`.toLowerCase().includes(q));
+  const notSignedIn = data.rows.filter((r) => r.student.account && r.student.account !== 'active').length;
 
   async function patchSection(body) {
     try {
@@ -268,7 +269,7 @@ export default function SectionRecord() {
               items={[
                 { label: 'Section details', hint: 'Code, subject, schedule, term', icon: 'edit', onClick: () => setPanel('details') },
                 { label: 'Students', hint: 'Import or add to the class list', icon: 'userPlus', onClick: () => setPanel('students') },
-                { label: 'Student accounts', hint: 'Email sign-in details', icon: 'mail', onClick: () => setPanel('accounts') },
+                { label: 'Student accounts', hint: 'Send sign-in details', icon: 'mail', onClick: () => setView('accounts') },
                 { label: 'Percentage & grade scale', hint: 'Weights and equivalence table', icon: 'sliders', onClick: () => setPanel('weights') },
                 'divider',
                 {
@@ -332,7 +333,7 @@ export default function SectionRecord() {
           </div>
         </div>
 
-        {insights && tab !== 'attendance' && (
+        {insights && (tab === 'MID' || tab === 'POST') && (
           <div className="dash-charts two rec-charts">
             <ChartCard title={`Average by component · ${TERM[term].name}`} sub="Class average, percent of the total score">
               {insights.comps.some((c) => c.values[0] != null) ? (
@@ -378,9 +379,15 @@ export default function SectionRecord() {
               <Icon name="calendar" size={15} /> Attendance
               {section.attendance?.sessions?.length > 0 && <span className="count-badge">{section.attendance.sessions.length}</span>}
             </button>
+            <button role="tab" aria-selected={tab === 'accounts'} onClick={() => setView('accounts')}>
+              <Icon name="key" size={15} /> Accounts
+              {notSignedIn > 0 && <span className="count-badge" title="Not signed in yet">{notSignedIn}</span>}
+            </button>
           </div>
           {tab === 'attendance' ? (
             <AttendanceView sectionId={id} data={data} setData={setData} query={query} setQuery={setQuery} />
+          ) : tab === 'accounts' ? (
+            <AccountsView section={section} query={query} setQuery={setQuery} onChanged={() => api(`/faculty/sections/${id}`).then(setData).catch(() => {})} />
           ) : (
           <div className="card table-card">
             <div className="table-toolbar">
@@ -564,15 +571,8 @@ export default function SectionRecord() {
           onClose={() => setImportResult(null)}
           onSendAccounts={() => {
             setImportResult(null);
-            setPanel('accounts');
+            setView('accounts');
           }}
-        />
-      )}
-      {panel === 'accounts' && (
-        <StudentAccountsModal
-          section={section}
-          onClose={closePanel}
-          onDone={() => api(`/faculty/sections/${id}`).then(setData).catch(() => {})}
         />
       )}
 

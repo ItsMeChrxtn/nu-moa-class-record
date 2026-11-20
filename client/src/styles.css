@@ -531,6 +531,25 @@ button.mark:focus-visible { outline: none; border-color: var(--line-2); box-shad
 .acct-row:last-child { border-bottom: 0; }
 .acct-pw { display: inline-flex; align-items: center; gap: 4px; }
 .acct-pw code { font-weight: 700; color: var(--blue); letter-spacing: 0.04em; }
+/* Accounts tab of a section */
+.acct-pick { padding: 10px 16px; border-bottom: 1px solid var(--line); gap: 14px; }
+.acct-pick .link-btn { color: var(--blue); }
+.acct-pick .link-btn:hover { color: var(--ink); }
+.acct-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.acct-table th { position: sticky; top: 0; z-index: 1; background: var(--surface); text-align: left; padding: 10px 12px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-3); border-bottom: 1px solid var(--line); }
+.acct-table td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.acct-table tbody tr { cursor: pointer; }
+.acct-table tbody tr:hover { background: #f8fafc; }
+.acct-table tbody tr.on { background: #eff6ff; }
+.acct-table .acct-check { width: 40px; }
+.acct-table input[type='checkbox'] { width: 16px; height: 16px; accent-color: var(--blue); }
+.acct-who { display: flex; align-items: center; gap: 10px; }
+.acct-when { display: block; margin-top: 3px; font-size: 0.72rem; color: var(--ink-3); }
+.btn-sm { height: 30px; padding: 0 10px; font-size: 0.78rem; gap: 5px; }
+.acct-result { margin-bottom: 12px; padding: 14px 16px; display: grid; gap: 10px; }
+.acct-result-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.acct-result-head strong { display: block; font-family: var(--display); font-size: 1.05rem; font-weight: 800; }
+.acct-result-head span { font-family: var(--mono); font-size: 0.74rem; color: var(--ink-2); }
 .no-mail { font-style: normal; color: var(--red-ink); }
 .check { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
 .check:hover { border-color: var(--line-2); }

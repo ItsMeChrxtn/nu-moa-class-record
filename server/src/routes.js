@@ -729,13 +729,16 @@ faculty.get(
 
 // Create accounts and email temporary passwords. Never touches a student who already set their own
 // password, or a temporary password another faculty issued (see sharedAccounts).
-// Body: { resend: bool (also students already emailed), includeNoEmail: bool (create, show passwords here) }
+// Body: { resend: bool (also students already emailed), includeNoEmail: bool (create, show passwords here),
+//         studentIds: [id] (only these students; picked by hand, so they are resent and shown here when needed) }
 faculty.post(
   '/sections/:id/accounts/send',
   ownSection,
   wrap(async (req, res) => {
-    const { resend = false, includeNoEmail = false } = req.body || {};
-    const enrollments = await Enrollment.find({ section: req.section._id }).populate('student');
+    const picked = Array.isArray(req.body?.studentIds) ? new Set(req.body.studentIds.map(String)) : null;
+    const { resend = !!picked, includeNoEmail = !!picked } = req.body || {};
+    let enrollments = await Enrollment.find({ section: req.section._id }).populate('student');
+    if (picked) enrollments = enrollments.filter((e) => e.student && picked.has(String(e.student._id)));
     const result = { sent: 0, failed: [], shown: [], skippedActive: 0, skippedShared: 0, skippedSent: 0, skippedNoEmail: 0 };
     const hasMail = mailConfigured();
     const queue = [];
