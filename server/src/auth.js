@@ -16,6 +16,27 @@ export function tempPassword(len = 10) {
   return Array.from(bytes, (b) => chars[b % chars.length]).join('');
 }
 
+// Temporary passwords are also kept encrypted (key derived from JWT_SECRET) so faculty can view them again.
+const tempKey = () => crypto.createHash('sha256').update(`temp-password:${process.env.JWT_SECRET}`).digest();
+
+export function encryptTemp(pw) {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', tempKey(), iv);
+  const data = Buffer.concat([c.update(String(pw), 'utf8'), c.final()]);
+  return [iv, c.getAuthTag(), data].map((b) => b.toString('base64')).join('.');
+}
+
+export function decryptTemp(enc) {
+  try {
+    const [iv, tag, data] = String(enc).split('.').map((x) => Buffer.from(x, 'base64'));
+    const d = crypto.createDecipheriv('aes-256-gcm', tempKey(), iv);
+    d.setAuthTag(tag);
+    return Buffer.concat([d.update(data), d.final()]).toString('utf8');
+  } catch {
+    return null; // JWT_SECRET changed, or the value is damaged
+  }
+}
+
 export function setSession(res, user) {
   const token = jwt.sign({ sub: String(user._id), role: user.role }, process.env.JWT_SECRET, {
     expiresIn: '8h',

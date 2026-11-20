@@ -26,6 +26,20 @@ export function StudentAccountsModal({ section, onClose, onDone }) {
   const [includeNoEmail, setIncludeNoEmail] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
+  const [revealed, setRevealed] = useState({}); // student id -> temporary password, shown on request
+
+  // For when the email never arrived: show the current temporary password so it can be sent another way.
+  async function reveal(s) {
+    try {
+      const d = await api(`/faculty/sections/${section.id}/students/${s.id}/temp-password`);
+      setRevealed((r) => ({ ...r, [s.id]: d.tempPassword }));
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  const copyDetails = (s, pw) =>
+    navigator.clipboard.writeText(`Student number: ${s.studentNo}\nTemporary password: ${pw}`).then(() => toast('Sign-in details copied'));
 
   useEffect(() => {
     api(`/faculty/sections/${section.id}/accounts`).then(setData).catch((e) => setError(e.message));
@@ -107,7 +121,7 @@ export function StudentAccountsModal({ section, onClose, onDone }) {
         )}
         {handOut.length > 0 && (
           <>
-            <p className="muted small">Give these students their password yourself. A copy is saved on the server, and these are shown only once.</p>
+            <p className="muted small">Give these students their password yourself. You can view each one again from Student accounts until the student signs in.</p>
             <div className="cred-table">
               {handOut.map((c) => (
                 <div key={c.studentNo} className="cred-line">
@@ -191,6 +205,20 @@ export function StudentAccountsModal({ section, onClose, onDone }) {
                   <span>{s.studentNo} · {s.email || <em className="no-mail">no email</em>}</span>
                 </div>
                 <span className={`acct-chip acct-${s.status}`}><i />{s.shared ? 'From another class' : ACCOUNT_LABEL[s.status]}</span>
+                {(s.status === 'temp' || s.status === 'sent') && (
+                  revealed[s.id] ? (
+                    <span className="acct-pw">
+                      <code>{revealed[s.id]}</code>
+                      <button className="icon-btn" title="Copy sign-in details" onClick={() => copyDetails(s, revealed[s.id])}>
+                        <Icon name="copy" size={15} />
+                      </button>
+                    </span>
+                  ) : (
+                    <button className="icon-btn" title="View temporary password" onClick={() => reveal(s)}>
+                      <Icon name="eye" size={15} />
+                    </button>
+                  )
+                )}
               </div>
             ))}
           </div>

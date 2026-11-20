@@ -15,6 +15,9 @@ const userSchema = new Schema(
     lastLoginAt: Date,
     credentialsSentAt: Date, // when the current temporary password was emailed
     accountBy: { type: Schema.Types.ObjectId, ref: 'User' }, // who issued the current temporary password
+    // Students: the current temporary password, encrypted (AES-256-GCM), so faculty can look it up and
+    // give it another way if the email never arrived. Cleared once the student sets their own password.
+    tempPasswordEnc: String,
     phone: String, // faculty: contact number, edited on their profile
     photo: String, // profile picture, a small JPEG data URL (resized in the browser)
     // "Forgot password": a one-hour link emailed to the user. Only the SHA-256 of the token is kept.

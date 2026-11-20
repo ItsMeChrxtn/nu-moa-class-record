@@ -1,7 +1,7 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import { User, Student, Section, Enrollment, AuditLog, audit } from './models.js';
-import { hashPassword, requireAuth, requirePasswordSet, requireRole, tempPassword } from './auth.js';
+import { encryptTemp, hashPassword, requireAuth, requirePasswordSet, requireRole, tempPassword } from './auth.js';
 import { saveCredentials } from './credentials.js';
 import { mailConfigured, sendFacultyCredentials } from './mailer.js';
 
@@ -254,6 +254,7 @@ admin.post(
     if (!user) return res.status(404).json({ error: 'This student has no account.' });
     const pw = tempPassword();
     user.passwordHash = await hashPassword(pw);
+    user.tempPasswordEnc = encryptTemp(pw);
     user.mustChangePassword = true;
     user.accountBy = req.user._id;
     await user.save();

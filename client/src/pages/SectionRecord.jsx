@@ -221,6 +221,16 @@ export default function SectionRecord() {
     }
   }
 
+  // For when the email never arrived: show the current temporary password so it can be sent another way.
+  async function viewTempPassword(student) {
+    try {
+      const d = await api(`/faculty/sections/${id}/students/${student.id}/temp-password`);
+      setResetInfo({ ...d, name: student.name, viewed: true });
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
   async function removeStudent(student) {
     const ok = await confirm({
       title: `Remove from ${section.code}?`,
@@ -485,6 +495,11 @@ export default function SectionRecord() {
                         <span className="grade-cell"><span className="num">{fmt(r.grades[TERM[term].grade].percent)}</span><EqBadge eq={r.grades[TERM[term].grade].equivalent} /></span>
                       </td>
                       <td className="gstart">
+                        {(r.student.account === 'temp' || r.student.account === 'sent') && (
+                          <button className="icon-btn" title="View temporary password" onClick={() => viewTempPassword(r.student)}>
+                            <Icon name="eye" size={16} />
+                          </button>
+                        )}
                         <button className="icon-btn" title="Reset password" onClick={() => resetPassword(r.student)}>
                           <Icon name="key" size={16} />
                         </button>
@@ -562,10 +577,22 @@ export default function SectionRecord() {
       )}
 
       {resetInfo && (
-        <Modal title="New temporary password" subtitle="This is shown only once." icon="key" onClose={() => setResetInfo(null)} width={440}
-          footer={<button className="btn primary" onClick={() => setResetInfo(null)}>Done</button>}
+        <Modal
+          title={resetInfo.viewed ? 'Temporary password' : 'New temporary password'}
+          subtitle={resetInfo.viewed ? 'Still valid until the student signs in and changes it.' : 'You can view it again from the grade sheet until the student signs in.'}
+          icon="key" onClose={() => setResetInfo(null)} width={440}
+          footer={
+            <>
+              <button className="btn" onClick={() => navigator.clipboard.writeText(`Student number: ${resetInfo.username}\nTemporary password: ${resetInfo.tempPassword}`).then(() => toast('Sign-in details copied'))}>
+                <Icon name="copy" size={16} /> Copy sign-in details
+              </button>
+              <button className="btn primary" onClick={() => setResetInfo(null)}>Done</button>
+            </>
+          }
         >
-          {resetInfo.mail?.sent ? (
+          {resetInfo.viewed ? (
+            <div className="alert info"><Icon name="info" />If the student did not get the email, copy this and send it to them another way (chat, text, or in person).</div>
+          ) : resetInfo.mail?.sent ? (
             <div className="alert ok"><Icon name="check" />Emailed to <strong>{resetInfo.email}</strong>.</div>
           ) : resetInfo.mail?.configured && resetInfo.email ? (
             <div className="alert error"><Icon name="alert" />The email could not be sent ({resetInfo.mail.error}). Give the student this password.</div>

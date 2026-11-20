@@ -15,6 +15,8 @@ import JSZip from 'jszip';
 import admin, { FACULTY_EMAIL } from './admin.js';
 import {
   clearSession,
+  decryptTemp,
+  encryptTemp,
   hashPassword,
   publicUser,
   requireAuth,
@@ -70,6 +72,7 @@ router.post(
       return res.status(400).json({ error: 'The new password must be different from the current one.' });
     req.user.passwordHash = await hashPassword(newPassword);
     req.user.mustChangePassword = false;
+    req.user.tempPasswordEnc = undefined;
     req.user.resetTokenHash = undefined; // an emailed reset link stops working once the password changes
     req.user.resetTokenExpires = undefined;
     await req.user.save();
@@ -153,6 +156,7 @@ router.post(
       return res.status(400).json({ error: 'The new password must be at least 8 characters.' });
     user.passwordHash = await hashPassword(newPassword);
     user.mustChangePassword = false;
+    user.tempPasswordEnc = undefined;
     user.resetTokenHash = undefined;
     user.resetTokenExpires = undefined;
     await user.save();
@@ -508,6 +512,7 @@ faculty.post(
     if (!user) return res.status(404).json({ error: 'This student has no account yet. Use “Student accounts” to create it.' });
     const pw = tempPassword();
     user.passwordHash = await hashPassword(pw);
+    user.tempPasswordEnc = encryptTemp(pw);
     user.mustChangePassword = true;
     user.credentialsSentAt = undefined;
     user.accountBy = req.user._id;
@@ -702,6 +707,26 @@ faculty.get(
   })
 );
 
+// The current temporary password of a student in this section, for when the email never arrived and
+// the faculty gives it another way. Only while the student has not set their own password.
+faculty.get(
+  '/sections/:id/students/:studentId/temp-password',
+  ownSection,
+  wrap(async (req, res) => {
+    const enrolled = await Enrollment.exists({ section: req.section._id, student: req.params.studentId });
+    if (!enrolled) return res.status(404).json({ error: 'Student not in section' });
+    const user = await User.findOne({ student: req.params.studentId, role: 'student' });
+    if (!user) return res.status(404).json({ error: 'This student has no account yet.' });
+    if (!user.mustChangePassword)
+      return res.status(409).json({ error: 'This student already signed in and set their own password.' });
+    const pw = user.tempPasswordEnc && decryptTemp(user.tempPasswordEnc);
+    if (!pw)
+      return res.status(404).json({ error: 'This temporary password was made before passwords could be viewed again. Reset the password to get a new one.' });
+    audit(req.user, 'student.view-temp-password', `${user.name} (${user.username})`, sectionLabel(req.section));
+    res.json({ username: user.username, tempPassword: pw });
+  })
+);
+
 // Create accounts and email temporary passwords. Never touches a student who already set their own
 // password, or a temporary password another faculty issued (see sharedAccounts).
 // Body: { resend: bool (also students already emailed), includeNoEmail: bool (create, show passwords here) }
@@ -734,6 +759,7 @@ faculty.post(
       const pw = tempPassword();
       if (!user) user = new User({ username: s.studentNo, role: 'student', name: s.name, student: s._id });
       user.passwordHash = await hashPassword(pw);
+      user.tempPasswordEnc = encryptTemp(pw);
       user.mustChangePassword = true;
       user.credentialsSentAt = undefined;
       user.accountBy = req.user._id;
