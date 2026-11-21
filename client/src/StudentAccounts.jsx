@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api.js';
 import { Avatar, EmptyState, Icon, PageLoader, useUI } from './ui.jsx';
+import { Donut } from './Charts.jsx';
 
 export const ACCOUNT_LABEL = {
   none: 'No account',
@@ -26,7 +27,7 @@ const canSend = (s) => s.status !== 'active' && !s.shared;
 
 // "Accounts" tab of a section: every student's sign-in status. The faculty ticks who should get a
 // temporary password; it is emailed when possible and shown here otherwise.
-export function AccountsView({ section, query, setQuery, onChanged }) {
+export function AccountsView({ section, query, setQuery, onChanged, onHistory, onResetPassword, onRemove }) {
   const { toast, confirm } = useUI();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -96,6 +97,13 @@ export function AccountsView({ section, query, setQuery, onChanged }) {
     } catch (e) {
       toast(e.message, 'error');
     }
+  }
+
+  // Reset or remove (handled by the section page), then reload this list.
+  async function act(fn, s) {
+    if (!fn) return;
+    await fn(s);
+    load();
   }
 
   const copy = (studentNo, pw) => navigator.clipboard.writeText(signInText(studentNo, pw)).then(() => toast('Sign-in details copied'));
@@ -178,6 +186,8 @@ export function AccountsView({ section, query, setQuery, onChanged }) {
         </div>
       )}
 
+      <SignInChart students={data.students} onPick={() => pick(() => true)} />
+
       <div className="card table-card">
         <div className="table-toolbar">
           <div className="toolbar-title">
@@ -223,6 +233,7 @@ export function AccountsView({ section, query, setQuery, onChanged }) {
                   <th>Email</th>
                   <th>Status</th>
                   <th>Temporary password</th>
+                  <th className="acct-actions-h">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -280,6 +291,17 @@ export function AccountsView({ section, query, setQuery, onChanged }) {
                           <span className="muted small">—</span>
                         )}
                       </td>
+                      <td className="acct-actions" onClick={(e) => e.stopPropagation()}>
+                        <button className="act-btn" title="Every score change for this student" onClick={() => onHistory?.(s)}>
+                          <Icon name="history" size={14} /> History
+                        </button>
+                        <button className="act-btn" title="Make a new temporary password" onClick={() => act(onResetPassword, s)}>
+                          <Icon name="key" size={14} /> Reset
+                        </button>
+                        <button className="act-btn danger" title="Remove from this section" onClick={() => act(onRemove, s)}>
+                          <Icon name="userMinus" size={14} /> Remove
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -289,5 +311,40 @@ export function AccountsView({ section, query, setQuery, onChanged }) {
         )}
       </div>
     </>
+  );
+}
+
+// How many students have signed in, out of the whole section, and where the rest are.
+function SignInChart({ students, onPick }) {
+  const n = (k) => students.filter((s) => s.status === k).length;
+  const total = students.length;
+  const signed = n('active');
+  const left = total - signed;
+  const pct = total ? Math.round((signed / total) * 100) : 0;
+  const parts = [
+    { label: 'Signed in', value: signed, color: 'var(--teal)' },
+    { label: 'Emailed, not signed in', value: n('sent'), color: 'var(--blue)' },
+    { label: 'Not emailed', value: n('temp'), color: 'var(--amber)' },
+    { label: 'No account', value: n('none'), color: '#cbd5e1' },
+  ];
+  return (
+    <div className="card signin-chart">
+      <div className="signin-donut">
+        <Donut parts={parts} center={`${signed}/${total}`} centerLabel="signed in" size={150} />
+      </div>
+      <div className="signin-side">
+        <span className="t2-kicker">Sign-in progress</span>
+        <h2>{left ? `${left} student${left === 1 ? ' has' : 's have'} not signed in yet` : 'Everyone has signed in'}</h2>
+        <div className="signin-bar" title={`${signed} of ${total} signed in`}>
+          {parts.map((p) => p.value > 0 && <span key={p.label} style={{ width: `${(p.value / Math.max(1, total)) * 100}%`, background: p.color }} title={`${p.label}: ${p.value}`} />)}
+        </div>
+        <p className="signin-sub"><b>{pct}%</b> of {total} students signed in</p>
+        {left > 0 && (
+          <button className="btn" onClick={onPick}>
+            <Icon name="mail" size={15} /> Select everyone not signed in
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

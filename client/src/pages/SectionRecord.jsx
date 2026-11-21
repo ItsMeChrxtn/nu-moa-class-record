@@ -323,23 +323,6 @@ export default function SectionRecord() {
     }
   }
 
-  // For when the email never arrived: show the current temporary password so it can be sent another way.
-  async function viewTempPassword(student) {
-    try {
-      const d = await api(`/faculty/sections/${id}/students/${student.id}/temp-password`);
-      setResetInfo({ ...d, name: student.name, viewed: true });
-    } catch (e) {
-      // Made before passwords were kept: it cannot be shown, so offer a new one.
-      if (e.status === 410)
-        return resetPassword(student, {
-          title: 'Make a new temporary password?',
-          message: `${titleCase(student.name)}'s temporary password was made before passwords could be viewed again, so it cannot be shown. Make a new one? It is emailed when possible, and you can copy it here.`,
-          confirmLabel: 'Make new password',
-        });
-      toast(e.message, 'error');
-    }
-  }
-
   async function removeStudent(student) {
     const ok = await confirm({
       title: `Remove from ${section.code}?`,
@@ -495,7 +478,15 @@ export default function SectionRecord() {
           {tab === 'attendance' ? (
             <AttendanceView sectionId={id} data={data} setData={setData} query={query} setQuery={setQuery} />
           ) : tab === 'accounts' ? (
-            <AccountsView section={section} query={query} setQuery={setQuery} onChanged={() => api(`/faculty/sections/${id}`).then(setData).catch(() => {})} />
+            <AccountsView
+              section={section}
+              query={query}
+              setQuery={setQuery}
+              onChanged={() => api(`/faculty/sections/${id}`).then(setData).catch(() => {})}
+              onHistory={openHistory}
+              onResetPassword={resetPassword}
+              onRemove={removeStudent}
+            />
           ) : (
           <div className="card table-card">
             <div className="table-toolbar">
@@ -546,7 +537,6 @@ export default function SectionRecord() {
                     {term === 'POST' && <th rowSpan={3} className="grp grp-BONUS">Bonus</th>}
                     {term === 'POST' && !finalOnly && <th rowSpan={3} className="grp grp-REF">Midterm</th>}
                     <th rowSpan={3} className="grp grp-GRADE">{TERM[term].gradeLabel}</th>
-                    <th rowSpan={3} className="gstart"></th>
                   </tr>
                   <tr>
                     {items.map((it) => (
@@ -612,22 +602,6 @@ export default function SectionRecord() {
                       )}
                       <td className="gstart grade-col">
                         <span className="grade-cell"><span className="num">{fmt(r.grades[TERM[term].grade].percent)}</span><EqBadge eq={r.grades[TERM[term].grade].equivalent} /></span>
-                      </td>
-                      <td className="gstart">
-                        <button className="icon-btn" title="Score history" onClick={() => openHistory(r.student)}>
-                          <Icon name="history" size={16} />
-                        </button>
-                        {(r.student.account === 'temp' || r.student.account === 'sent') && (
-                          <button className="icon-btn" title="View temporary password" onClick={() => viewTempPassword(r.student)}>
-                            <Icon name="eye" size={16} />
-                          </button>
-                        )}
-                        <button className="icon-btn" title="Reset password" onClick={() => resetPassword(r.student)}>
-                          <Icon name="key" size={16} />
-                        </button>
-                        <button className="icon-btn danger" title="Remove from section" onClick={() => removeStudent(r.student)}>
-                          <Icon name="userMinus" size={16} />
-                        </button>
                       </td>
                     </tr>
                   ))}
@@ -729,7 +703,7 @@ export default function SectionRecord() {
       {resetInfo && (
         <Modal
           title={resetInfo.viewed ? 'Temporary password' : 'New temporary password'}
-          subtitle={resetInfo.viewed ? 'Still valid until the student signs in and changes it.' : 'You can view it again from the grade sheet until the student signs in.'}
+          subtitle={resetInfo.viewed ? 'Still valid until the student signs in and changes it.' : 'You can view it again from the Accounts tab until the student signs in.'}
           icon="key" onClose={() => setResetInfo(null)} width={440}
           footer={
             <>
