@@ -33,22 +33,26 @@ export default function Login() {
 
   return (
     <div className="auth-page">
-      <header className="auth-top">
+      <aside className="auth-brand">
         <span className="brand">
           <BrandMark />
-          <span className="brand-text"><strong>Class Record</strong></span>
+          <span className="brand-text"><strong>Class Record</strong><small>National University MOA</small></span>
         </span>
-        <span className="top-chip">National University · MOA</span>
-      </header>
-
+        <div className="auth-brand-body">
+          <h2>Grades, attendance and class records in one place.</h2>
+          <ul>
+            <li><Icon name="chart" size={16} /> Faculty encode scores and publish grades per term</li>
+            <li><Icon name="calendar" size={16} /> Attendance and weekly schedules for every section</li>
+            <li><Icon name="award" size={16} /> Students see each score behind their grade</li>
+          </ul>
+        </div>
+        <small className="auth-brand-foot">© {new Date().getFullYear()} National University MOA</small>
+      </aside>
+      <div className="auth-panel">
       <main className="auth-hero">
-        <p className="eyebrow">Grade breakdown · Online class record</p>
-        <h1>
-          Know your <span className="accent">grades.</span>
-        </h1>
-        <p className="hero-text">
-          Every quiz, activity and exam behind your midterm and final grade. Log in with your email to see it.
-        </p>
+        <p className="eyebrow">Welcome</p>
+        <h1>Sign in to your account</h1>
+        <p className="hero-text">Sign in with your email address and password.</p>
 
         <form className="auth-form" onSubmit={submit}>
           <label className="field">
@@ -93,7 +97,8 @@ export default function Login() {
         </form>
       </main>
 
-      <footer className="auth-foot">For viewing only · If a score looks off, message your instructor.</footer>
+      <footer className="auth-foot">If a score looks off, message your instructor.</footer>
+      </div>
     </div>
   );
 }

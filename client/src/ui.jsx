@@ -176,35 +176,20 @@ function CampusArt() {
   );
 }
 
-// Dashboard welcome card: greeting and a real summary on the left, today's date on the right.
-export function WelcomeBanner({ eyebrow, title, lead, actions, facts = [] }) {
+// Dashboard page header: date and context on top, the greeting, a one-line summary and the main actions.
+export function WelcomeBanner({ eyebrow, title, lead, actions }) {
   const d = new Date();
   return (
-    <section className="hero-nu">
-      <div className="hero-nu-photo" role="img" aria-label="NU MOA campus building" />
-      <div className="hero-nu-shade" />
-      <div className="hero-nu-body">
-        <div className="hero-nu-top">
-          {eyebrow && <span className="hero-nu-tag"><i />{eyebrow}</span>}
-          <span className="hero-nu-date">{d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</span>
-        </div>
+    <section className="page-head">
+      <div className="page-head-text">
+        <p className="page-head-meta">
+          <span>{d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+          {eyebrow && <span>{eyebrow}</span>}
+        </p>
         <h1>{title}</h1>
-        {lead && <p className="hero-nu-lead">{lead}</p>}
-        <div className="hero-nu-foot">
-          {actions && <div className="hero-nu-actions">{actions}</div>}
-          {facts.length > 0 && (
-            <dl className="hero-nu-facts">
-              {facts.map((f) => (
-                <div key={f.label}>
-                  <dt>{f.label}</dt>
-                  <dd>{f.value}</dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </div>
+        {lead && <p className="page-head-lead">{lead}</p>}
       </div>
-      <span className="hero-nu-mark" aria-hidden="true">NU MOA</span>
+      {actions && <div className="page-head-actions">{actions}</div>}
     </section>
   );
 }

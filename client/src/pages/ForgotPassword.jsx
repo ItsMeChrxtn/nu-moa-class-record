@@ -8,13 +8,22 @@ import { LABELS, strength } from './ChangePassword.jsx';
 function AuthShell({ eyebrow, title, accent, text, children }) {
   return (
     <div className="auth-page">
-      <header className="auth-top">
-        <Link to="/login" className="brand">
+      <aside className="auth-brand">
+        <span className="brand">
           <BrandMark />
-          <span className="brand-text"><strong>Class Record</strong></span>
-        </Link>
-        <span className="top-chip">National University · MOA</span>
-      </header>
+          <span className="brand-text"><strong>Class Record</strong><small>National University MOA</small></span>
+        </span>
+        <div className="auth-brand-body">
+          <h2>Grades, attendance and class records in one place.</h2>
+          <ul>
+            <li><Icon name="chart" size={16} /> Faculty encode scores and publish grades per term</li>
+            <li><Icon name="calendar" size={16} /> Attendance and weekly schedules for every section</li>
+            <li><Icon name="award" size={16} /> Students see each score behind their grade</li>
+          </ul>
+        </div>
+        <small className="auth-brand-foot">© {new Date().getFullYear()} National University MOA</small>
+      </aside>
+      <div className="auth-panel">
       <main className="auth-hero">
         <p className="eyebrow">{eyebrow}</p>
         <h1>
@@ -24,6 +33,7 @@ function AuthShell({ eyebrow, title, accent, text, children }) {
         {children}
       </main>
       <footer className="auth-foot">Remembered it? <Link to="/login">Back to sign in</Link></footer>
+      </div>
     </div>
   );
 }
