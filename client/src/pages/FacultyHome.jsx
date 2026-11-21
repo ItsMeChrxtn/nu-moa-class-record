@@ -33,6 +33,74 @@ function termGroups(sections) {
 }
 
 // Classes that meet today, earliest first, with the one in progress or up next marked.
+// Students who may need help this term: failing the current grade, 3+ absences, or 2+ missing scores.
+const RISK_TEXT = { failing: 'Failing', absences: 'Absences', missing: 'Missing work' };
+function AtRiskPanel({ sections, colors }) {
+  const [filter, setFilter] = useState('all');
+  const [showAll, setShowAll] = useState(false);
+  const all = sections.flatMap((s) => (s.atRisk || []).map((r) => ({ ...r, section: s })));
+  const count = (k) => all.filter((r) => r.reasons.includes(k)).length;
+  const list = (filter === 'all' ? all : all.filter((r) => r.reasons.includes(filter))).sort(
+    (a, b) => b.reasons.length - a.reasons.length || (a.percent ?? 0) - (b.percent ?? 0)
+  );
+  const shown = showAll ? list : list.slice(0, 8);
+
+  return (
+    <section className="card risk">
+      <header className="risk-head">
+        <div>
+          <span className="t2-kicker">Needs attention</span>
+          <h2>{all.length ? `${all.length} student${all.length === 1 ? '' : 's'} at risk` : 'No students at risk'}</h2>
+          <span className="t2-sub">Failing the current grade, {3}+ absences, or {2}+ missing scores this term</span>
+        </div>
+        {all.length > 0 && (
+          <div className="seg" role="tablist">
+            {['all', 'failing', 'absences', 'missing'].map((k) => (
+              <button key={k} role="tab" aria-selected={filter === k} onClick={() => { setFilter(k); setShowAll(false); }}>
+                {k === 'all' ? 'All' : RISK_TEXT[k]} <b>{k === 'all' ? all.length : count(k)}</b>
+              </button>
+            ))}
+          </div>
+        )}
+      </header>
+      {all.length === 0 ? (
+        <p className="risk-empty"><Icon name="check" size={16} /> Everyone is passing, with fewer than 3 absences and no missing work.</p>
+      ) : (
+        <>
+          <ul className="risk-list">
+            {shown.map((r) => (
+              <li key={`${r.section.id}-${r.student.id}`}>
+                <Link to={`/faculty/sections/${r.section.id}`} className="risk-row">
+                  <span className={`risk-sec sc-${colors.get(r.section.id) ?? 0}`}>{r.section.code}</span>
+                  <span className="risk-who">
+                    <strong>{titleCase(r.student.name)}</strong>
+                    <small>{r.student.studentNo}</small>
+                  </span>
+                  <span className="risk-tags">
+                    {r.reasons.includes('failing') && (
+                      <span className="risk-tag fail">{r.term === 'final' ? 'Final' : 'Midterm'} {r.percent != null ? `${r.percent.toFixed(1)}%` : ''} · {r.equivalent}</span>
+                    )}
+                    {r.reasons.includes('absences') && <span className="risk-tag abs">{r.absences} absences</span>}
+                    {r.reasons.includes('missing') && (
+                      <span className="risk-tag miss" title={r.missing.join(', ')}>{r.missing.length} missing: {r.missing.slice(0, 3).join(', ')}{r.missing.length > 3 ? '…' : ''}</span>
+                    )}
+                  </span>
+                  <Icon name="chevronRight" size={16} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {list.length > 8 && (
+            <button className="link-btn risk-more" onClick={() => setShowAll(!showAll)}>
+              {showAll ? 'Show fewer' : `Show all ${list.length}`}
+            </button>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 function TodayPanel({ sections, colors, onOpenWeek }) {
   const day = todayCode();
   const now = new Date();
@@ -399,6 +467,7 @@ export default function FacultyHome() {
 
               <DashCharts sections={current} />
 
+              <AtRiskPanel sections={current} colors={colors} />
               <TodayPanel sections={current} colors={colors} onOpenWeek={() => pick('schedule')} />
             </>
           )}

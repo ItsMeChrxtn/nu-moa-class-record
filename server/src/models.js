@@ -109,6 +109,9 @@ const sectionSchema = new Schema(
           date: { type: String, required: true }, // YYYY-MM-DD
           period: { type: String, enum: ['MID', 'POST'], default: 'MID' },
           label: { type: String, trim: true },
+          // Self check-in while open: students type a 6-digit code that changes every 30 seconds
+          // (made from the secret), shown on the faculty's screen. Late once lateAt has passed.
+          checkin: { secret: String, until: Date, lateAt: Date },
         }),
       ],
     },
@@ -216,6 +219,27 @@ export async function notifyGrades(section) {
     return e.insertedDocs?.length || 0;
   }
 }
+
+// Every score change on the grade sheet: who changed what, from and to which value. Used for each
+// student's score history and for undo (a paste is one batch, undone together).
+const scoreChangeSchema = new Schema({
+  section: { type: Schema.Types.ObjectId, ref: 'Section', required: true },
+  student: { type: Schema.Types.ObjectId, ref: 'Student', required: true },
+  item: { type: String, required: true }, // item id, or 'bonus'
+  label: String, // item label at the time, e.g. "Q1"
+  max: Number,
+  from: { type: Number, default: null }, // null = blank
+  to: { type: Number, default: null },
+  by: { type: Schema.Types.ObjectId, ref: 'User' },
+  byName: String,
+  batch: { type: String, required: true },
+  source: { type: String, enum: ['edit', 'paste', 'undo'], default: 'edit' },
+  undone: { type: Boolean, default: false },
+  at: { type: Date, default: Date.now },
+});
+scoreChangeSchema.index({ section: 1, student: 1, at: -1 });
+scoreChangeSchema.index({ section: 1, by: 1, at: -1 });
+export const ScoreChange = model('ScoreChange', scoreChangeSchema);
 
 // A faculty's notice that a student in one of their sections signed in for the first time
 // (set their own password). One per faculty, section and student.

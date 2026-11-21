@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from './api.js';
-import { Avatar, Icon, useUI } from './ui.jsx';
+import { Avatar, Icon, Modal, useUI } from './ui.jsx';
 
 export const MARK_LABEL = { P: 'Present', L: 'Late', A: 'Absent', E: 'Excused' };
 const LATE_OPTIONS = [1, 0.75, 0.5, 0.25, 0];
@@ -26,6 +26,7 @@ export function AttendanceView({ sectionId, data, setData, query, setQuery }) {
   const [pick, setPick] = useState(null); // chosen session id; otherwise today's or the latest
   const [view, setView] = useState('roll'); // 'roll' | 'all'
   const [editing, setEditing] = useState(null); // { id, date, period, label } while fixing a session
+  const [checkin, setCheckin] = useState(null); // session whose check-in code is on screen
 
   const latest = sessions.find((s) => s.date === todayIso) || [...sessions].sort((a, b) => a.date.localeCompare(b.date)).at(-1);
   const current = sessions.find((s) => s.id === pick) || latest;
@@ -256,6 +257,9 @@ export function AttendanceView({ sectionId, data, setData, query, setQuery }) {
                 {c.none > 0 && <span className="t-n"><b>{c.none}</b> Unmarked</span>}
               </div>
               <div className="att-day-actions">
+                <button className={`btn ${current.checkinOpen ? 'ci-on' : ''}`} onClick={() => setCheckin(current)} title="Students mark themselves with a code on the screen">
+                  <Icon name="clock" size={15} /> {current.checkinOpen ? 'Check-in running' : 'Check-in code'}
+                </button>
                 <button className="btn" onClick={() => markEveryone(current, 'P')}><Icon name="check" size={15} /> All present</button>
                 <button className="btn" onClick={() => setEditing({ id: current.id, date: current.date, period: current.period, label: current.label || '' })}><Icon name="edit" size={15} /> Edit</button>
                 <button className="btn att-del" onClick={() => removeSession(current)}><Icon name="trash" size={15} /> Delete session</button>
@@ -360,6 +364,150 @@ export function AttendanceView({ sectionId, data, setData, query, setQuery }) {
           </div>
         )}
       </section>
+      {checkin && (
+        <CheckinModal
+          sectionId={sectionId}
+          session={checkin}
+          counts={counts[checkin.id]}
+          onClose={() => {
+            setCheckin(null);
+            api(`/faculty/sections/${sectionId}`).then(setData).catch(() => {}); // pick up who checked in
+          }}
+          onChanged={(d) => (d ? setData(d) : api(`/faculty/sections/${sectionId}`).then(setData).catch(() => {}))}
+        />
+      )}
     </div>
+  );
+}
+
+// Self check-in for one session: a 6-digit code that changes every 30 seconds, shown big for the class.
+// Students type it under "Check in" on their page; present until the late time, late after.
+export function CheckinModal({ sectionId, session, counts, onClose, onChanged }) {
+  const { toast, confirm } = useUI();
+  const [status, setStatus] = useState(null);
+  const [setup, setSetup] = useState({ minutes: 30, lateAfter: 15, clear: counts && counts.P > 0 && counts.L + counts.A + counts.E === 0 });
+  const [busy, setBusy] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const base = `/faculty/sections/${sectionId}/attendance/sessions/${session.id}/checkin`;
+
+  // Poll while open: the code, and who has checked in.
+  useEffect(() => {
+    let alive = true;
+    let timer;
+    const load = () =>
+      api(base)
+        .then((d) => alive && setStatus({ ...d, fetchedAt: Date.now() }))
+        .catch(() => {})
+        .finally(() => { if (alive) timer = setTimeout(load, 3000); });
+    load();
+    const tick = setInterval(() => setNow(Date.now()), 500);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      clearInterval(tick);
+    };
+  }, [base]);
+
+  async function start() {
+    setBusy(true);
+    try {
+      // Everyone starts as present when a session is added; clear that so only students who check in count.
+      if (setup.clear) await api(`/faculty/sections/${sectionId}/attendance/marks`, { method: 'PUT', body: { sessionId: session.id, mark: null }, label: 'Clearing marks…' });
+      const d = await api(base, { method: 'POST', body: { minutes: setup.minutes, lateAfter: setup.lateAfter }, label: 'Opening check-in…' });
+      setStatus({ ...d, fetchedAt: Date.now() });
+      onChanged?.();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function stop() {
+    const rest = status?.counts?.none || 0;
+    let markRest = false;
+    if (rest > 0)
+      markRest = await confirm({
+        title: 'Close check-in',
+        message: `${rest} student${rest === 1 ? ' has' : 's have'} not checked in. Mark ${rest === 1 ? 'them' : 'them all'} absent? Choose Cancel to leave ${rest === 1 ? 'that student' : 'them'} unmarked.`,
+        confirmLabel: 'Mark absent',
+      });
+    setBusy(true);
+    try {
+      const d = await api(`${base}${markRest ? '?rest=A' : ''}`, { method: 'DELETE', label: 'Closing check-in…' });
+      onChanged?.(d);
+      toast(markRest ? `Check-in closed; ${rest} marked absent` : 'Check-in closed');
+      onClose();
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const open = status?.open;
+  const c = status?.counts || { P: 0, L: 0, A: 0, E: 0, none: 0 };
+  const left = open ? Math.max(0, status.nextChange - (now - status.fetchedAt)) : 0;
+  const mins = (d) => Math.max(0, Math.ceil((new Date(d) - now) / 60000));
+  const late = open && new Date(status.lateAt) <= now;
+
+  return (
+    <Modal
+      title="Check-in code"
+      subtitle={`${longDate(session.date)}${session.label ? ` · ${session.label}` : ''}`}
+      icon="clock"
+      width={520}
+      onClose={onClose}
+      footer={
+        open ? (
+          <>
+            <button className="btn" onClick={onClose}>Hide (keeps running)</button>
+            <button className="btn primary" disabled={busy} onClick={stop}>Close check-in</button>
+          </>
+        ) : (
+          <>
+            <button className="btn" onClick={onClose}>Cancel</button>
+            <button className="btn primary" disabled={busy || !status} onClick={start}><Icon name="clock" size={16} /> Start check-in</button>
+          </>
+        )
+      }
+    >
+      {!status ? null : open ? (
+        <div className="ci-live">
+          <p className="ci-how">Students open the Class Record, tap <b>Check in</b> and type this code:</p>
+          <div className="ci-code" aria-live="polite">{status.code.slice(0, 3)} {status.code.slice(3)}</div>
+          <div className="ci-timer"><span style={{ width: `${(left / 30000) * 100}%` }} /></div>
+          <p className="ci-sub">New code in {Math.ceil(left / 1000)}s · {late ? 'now marking Late' : `Present for ${mins(status.lateAt)} more min, then Late`} · closes in {mins(status.until)} min</p>
+          <div className="att-tally ci-tally">
+            <span className="t-p"><b>{c.P}</b> Present</span>
+            <span className="t-l"><b>{c.L}</b> Late</span>
+            <span className="t-n"><b>{c.none + c.A}</b> Not yet</span>
+          </div>
+        </div>
+      ) : (
+        <div className="ci-setup">
+          <p className="muted small">Show a code on the screen; students type it on their phone to mark themselves. The code changes every 30 seconds, so it can&apos;t be passed to someone who isn&apos;t in class.</p>
+          <label className="field">
+            <span>Keep open for</span>
+            <select value={setup.minutes} onChange={(e) => setSetup({ ...setup, minutes: Number(e.target.value), lateAfter: Math.min(setup.lateAfter, Number(e.target.value)) })}>
+              {[10, 15, 20, 30, 45, 60, 90].map((m) => <option key={m} value={m}>{m} minutes</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span>Mark as Late after</span>
+            <select value={setup.lateAfter} onChange={(e) => setSetup({ ...setup, lateAfter: Number(e.target.value) })}>
+              {[0, 5, 10, 15, 20, 30, 45, 60, 90].filter((m) => m <= setup.minutes).map((m) => <option key={m} value={m}>{m === 0 ? 'Right away (everyone Late)' : `${m} minutes`}</option>)}
+            </select>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={setup.clear} onChange={(e) => setSetup({ ...setup, clear: e.target.checked })} />
+            <span>
+              <strong>Start with nobody marked</strong>
+              <small>Clears this session&apos;s marks first, so only students who check in are present. Leave it off to keep marks you already made.</small>
+            </span>
+          </label>
+        </div>
+      )}
+    </Modal>
   );
 }

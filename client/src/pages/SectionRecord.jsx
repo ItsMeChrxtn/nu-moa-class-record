@@ -85,12 +85,30 @@ export default function SectionRecord() {
   const [resetInfo, setResetInfo] = useState(null);
   const [importResult, setImportResult] = useState(location.state?.result || null);
   const [view, setView] = useState(location.state?.view || null); // 'MID' | 'POST' | 'attendance' | 'accounts'; null = pick from the data
+  const [undo, setUndo] = useState(null); // what Undo would revert: { label, count, at }
+  const [history, setHistory] = useState(null); // { student, changes } for the score history popup
+  const undoRef = useRef(null);
 
   useEffect(() => {
+    api(`/faculty/sections/${id}/scores/undo`).then((d) => setUndo(d.undo)).catch(() => {});
     api(`/faculty/sections/${id}`).then(setData).catch((e) => setError(e.message));
     // Drop the one-time import result from history so a refresh doesn't show it again.
     if (location.state?.result) navigate(location.pathname, { replace: true, state: null });
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ctrl+Z (outside a score being typed) undoes the last saved score change.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
+      const el = document.activeElement;
+      // In a cell with unsaved typing, let the browser undo the typing instead.
+      if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !(el.classList.contains('cell') && el.dataset.saved === el.value)))) return;
+      e.preventDefault();
+      undoRef.current?.();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   // Opened from the faculty bell: go to that tab (also when already on this section).
   useEffect(() => {
@@ -183,6 +201,7 @@ export default function SectionRecord() {
 
   async function saveScore(studentId, itemId, score) {
     const d = await api(`/faculty/sections/${id}/scores`, { method: 'PUT', body: { studentId, itemId, score } });
+    setUndo(d.undo);
     setData((prev) => ({
       ...prev,
       rows: prev.rows.map((r) => {
@@ -197,6 +216,78 @@ export default function SectionRecord() {
         return next;
       }),
     }));
+  }
+
+  async function undoLast() {
+    if (!undo) return toast('Nothing to undo', 'info');
+    try {
+      const d = await api(`/faculty/sections/${id}/scores/undo`, { method: 'POST', label: 'Undoing…' });
+      setData(d.detail);
+      setUndo(d.undo);
+      toast(
+        d.skipped ? `${d.undone} reverted; ${d.skipped} left as is because they were changed again since.` : `Reverted: ${undo.label}`,
+        d.skipped ? 'info' : 'success',
+        'Undone'
+      );
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+  undoRef.current = undoLast;
+
+  // Paste from Excel into the grade sheet: rows go down the student list, columns go right across the
+  // items (attendance columns are skipped), starting at the cell pasted into. Returns false for a
+  // single value, which the cell handles itself.
+  async function pasteAt(ri, ci, text) {
+    const lines = text.replace(/\r/g, '').split('\n');
+    if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+    const grid = lines.map((l) => l.split('\t'));
+    if (grid.length === 1 && grid[0].length === 1) return false;
+    const editable = [
+      ...items.map((it, i) => ({ col: i, itemId: it.virtual ? null : it.id, label: it.label })).filter((c) => c.itemId),
+      ...(term === 'POST' ? [{ col: items.length, itemId: 'bonus', label: 'Bonus' }] : []),
+    ];
+    const start = editable.findIndex((c) => c.col === ci);
+    const changes = [];
+    let cut = 0;
+    for (let r = 0; r < grid.length; r++) {
+      const row = rows[ri + r];
+      if (!row) { cut++; continue; }
+      for (let c = 0; c < grid[r].length; c++) {
+        const col = editable[start + c];
+        if (!col) { cut++; continue; }
+        const raw = grid[r][c].trim().replace(',', '.');
+        const score = raw === '' || raw === '-' ? null : Number(raw);
+        if (score !== null && !Number.isFinite(score)) {
+          toast(`"${grid[r][c].trim()}" for ${titleCase(row.student.name)} (${col.label}) is not a number. Nothing was pasted.`, 'error', 'Paste stopped');
+          return true;
+        }
+        changes.push({ studentId: row.student.id, itemId: col.itemId, score });
+      }
+    }
+    if (!changes.length) return true;
+    try {
+      const d = await api(`/faculty/sections/${id}/scores/bulk`, { method: 'PUT', body: { changes }, label: `Pasting ${changes.length} scores…` });
+      setData(d.detail);
+      setUndo(d.undo);
+      toast(
+        `${d.changed} score${d.changed === 1 ? '' : 's'} changed${cut ? `; ${cut} cell${cut === 1 ? '' : 's'} past the last student or item were left out` : ''}. Press Ctrl+Z or Undo to revert.`,
+        'success',
+        'Pasted'
+      );
+    } catch (e) {
+      toast(e.message, 'error', 'Paste stopped');
+    }
+    return true;
+  }
+
+  async function openHistory(student) {
+    try {
+      const d = await api(`/faculty/sections/${id}/students/${student.id}/history`);
+      setHistory({ student, changes: d.changes });
+    } catch (e) {
+      toast(e.message, 'error');
+    }
   }
 
   async function removeItem(item) {
@@ -417,6 +508,9 @@ export default function SectionRecord() {
                   <Icon name="search" />
                   <input placeholder="Search by name or ID number…" value={query} onChange={(e) => setQuery(e.target.value)} />
                 </span>
+                <button className="btn" disabled={!undo} onClick={undoLast} title={undo ? `Undo: ${undo.label} (Ctrl+Z)` : 'Nothing to undo'}>
+                  <Icon name="undo" size={16} /> Undo
+                </button>
                 <button className="btn primary" onClick={() => setPanel('item')}>
                   <Icon name="plus" size={16} /> {term === 'MID' ? 'Midterm' : 'Finals'} item
                 </button>
@@ -425,7 +519,8 @@ export default function SectionRecord() {
             <div className="toolbar-meta table-meta">
               <span>{rows.length} students · {plural(items.filter((it) => !it.virtual).length, 'item')}</span>
               {term === 'POST' && <span>{finalOnly ? 'Final grade = CP + EA + CPT + bonus' : 'Final grade = CP & EA of both terms + MPT + CPT + bonus'}</span>}
-              <span className="hide-sm"><kbd>Enter</kbd> / <kbd>↑</kbd><kbd>↓</kbd> to move</span>
+              <span className="hide-sm"><kbd>Enter</kbd> / <kbd>↑</kbd><kbd>↓</kbd> to move · <kbd>Ctrl</kbd>+<kbd>V</kbd> pastes a column or block from Excel · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes</span>
+              {undo && <span className="undo-hint" title={`Saved ${new Date(undo.at).toLocaleString()}`}>Last change: {undo.label}</span>}
             </div>
 
             {items.length === 0 ? (
@@ -501,13 +596,13 @@ export default function SectionRecord() {
                               {r.scores[it.id] ?? 0}
                             </span>
                           ) : (
-                            <ScoreCell row={ri} col={ci} value={r.scores[it.id]} max={it.max} onSave={(v) => saveScore(r.student.id, it.id, v)} />
+                            <ScoreCell row={ri} col={ci} value={r.scores[it.id]} max={it.max} onSave={(v) => saveScore(r.student.id, it.id, v)} onPaste={(t) => pasteAt(ri, ci, t)} />
                           )}
                         </td>
                       ))}
                       {term === 'POST' && (
                         <td className="gstart">
-                          <ScoreCell row={ri} col={items.length} bonus value={r.bonus || undefined} onSave={(v) => saveScore(r.student.id, 'bonus', v)} />
+                          <ScoreCell row={ri} col={items.length} bonus value={r.bonus || undefined} onSave={(v) => saveScore(r.student.id, 'bonus', v)} onPaste={(t) => pasteAt(ri, items.length, t)} />
                         </td>
                       )}
                       {term === 'POST' && !finalOnly && (
@@ -519,6 +614,9 @@ export default function SectionRecord() {
                         <span className="grade-cell"><span className="num">{fmt(r.grades[TERM[term].grade].percent)}</span><EqBadge eq={r.grades[TERM[term].grade].equivalent} /></span>
                       </td>
                       <td className="gstart">
+                        <button className="icon-btn" title="Score history" onClick={() => openHistory(r.student)}>
+                          <Icon name="history" size={16} />
+                        </button>
                         {(r.student.account === 'temp' || r.student.account === 'sent') && (
                           <button className="icon-btn" title="View temporary password" onClick={() => viewTempPassword(r.student)}>
                             <Icon name="eye" size={16} />
@@ -593,6 +691,41 @@ export default function SectionRecord() {
         />
       )}
 
+      {history && (
+        <Modal
+          title="Score history"
+          subtitle={`${titleCase(history.student.name)} · ${history.student.studentNo}`}
+          icon="history"
+          width={560}
+          onClose={() => setHistory(null)}
+          footer={<button className="btn primary" onClick={() => setHistory(null)}>Done</button>}
+        >
+          {history.changes.length === 0 ? (
+            <p className="muted small">No score changes recorded yet. Changes are recorded from this update on.</p>
+          ) : (
+            <div className="hist-list">
+              {history.changes.map((c) => (
+                <div key={c.id} className={`hist-row ${c.undone ? 'undone' : ''}`}>
+                  <div className="hist-what">
+                    <strong>{c.label}</strong>
+                    <span className="hist-vals">
+                      <code>{c.from ?? 'blank'}</code> → <code>{c.to ?? 'blank'}</code>
+                      {c.max ? <small> / {c.max}</small> : null}
+                    </span>
+                  </div>
+                  <div className="hist-meta">
+                    {c.source === 'paste' && <span className="hist-tag">Pasted</span>}
+                    {c.source === 'undo' && <span className="hist-tag">Undo</span>}
+                    {c.undone && <span className="hist-tag muted">Undone</span>}
+                    <span>{c.by || '—'} · {new Date(c.at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+
       {resetInfo && (
         <Modal
           title={resetInfo.viewed ? 'Temporary password' : 'New temporary password'}
@@ -646,7 +779,7 @@ function focusCell(row, col) {
   }
 }
 
-function ScoreCell({ value, max, onSave, row, col, bonus }) {
+function ScoreCell({ value, max, onSave, onPaste, row, col, bonus }) {
   const [text, setText] = useState(value ?? '');
   const [state, setState] = useState(''); // '' | 'saving' | 'saved' | 'error'
   useEffect(() => setText(value ?? ''), [value]);
@@ -678,8 +811,17 @@ function ScoreCell({ value, max, onSave, row, col, bonus }) {
       className={`cell ${state} ${bonus ? 'bonus' : ''}`}
       data-row={row}
       data-col={col}
+      data-saved={value ?? ''}
       inputMode="decimal"
       value={text}
+      onPaste={(e) => {
+        // Several cells (from Excel or Sheets): the grade sheet fills them all at once.
+        const t = e.clipboardData?.getData('text/plain') || '';
+        if (!/[\t\n]/.test(t.trim())) return;
+        e.preventDefault();
+        setText(value ?? '');
+        onPaste?.(t);
+      }}
       placeholder="·"
       title={state === 'error' ? `Must be between 0 and ${max ?? '∞'}` : undefined}
       onFocus={(e) => e.target.select()}

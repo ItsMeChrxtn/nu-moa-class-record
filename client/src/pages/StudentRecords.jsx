@@ -5,6 +5,58 @@ import { EmptyState, ErrorState, Icon, PageLoader, Ring, Stat, WelcomeBanner, di
 import { BarRows, ChartCard, ChartEmpty, Donut } from '../Charts.jsx';
 import { downloadCertificate } from '../certificate.js';
 
+const MARK_WORD = { P: 'Present', L: 'Late', E: 'Excused' };
+
+// Attendance check-in: the student types the 6-digit code their teacher shows in class.
+function CheckinBox({ onDone }) {
+  const { toast } = useUI();
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(null);
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const d = await api('/me/checkin', { method: 'POST', body: { code }, label: 'Checking in…' });
+      setDone(d);
+      setCode('');
+      const when = new Date(`${d.date}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      toast(`${d.section.code} · ${when}: ${MARK_WORD[d.mark] || d.mark}`, d.mark === 'L' ? 'info' : 'success', d.already ? 'Already checked in' : 'Checked in');
+      onDone?.();
+    } catch (err) {
+      toast(err.message, 'error', 'Check-in failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form className="card checkin-box" onSubmit={submit}>
+      <span className="checkin-icon"><Icon name="clock" size={20} /></span>
+      <div className="checkin-text">
+        <strong>Check in to class</strong>
+        <span>
+          {done
+            ? `${done.already ? 'Already marked' : 'Marked'} ${MARK_WORD[done.mark] || done.mark} for ${done.section.code}${done.label ? ` (${done.label})` : ''}.`
+            : 'Type the 6-digit code your teacher shows on the screen.'}
+        </span>
+      </div>
+      <input
+        className="checkin-input"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        maxLength={7}
+        placeholder="000000"
+        value={code}
+        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        aria-label="Check-in code"
+      />
+      <button className="btn primary" disabled={busy || code.length !== 6}>{busy ? 'Checking…' : 'Check in'}</button>
+    </form>
+  );
+}
+
 const NAME = Object.fromEntries(COMPONENTS.map((c) => [c.key, c.name]));
 const fmtPct = (p) => (p == null ? '—' : `${Number(p).toFixed(2)}%`);
 const TERMS = {
@@ -49,6 +101,7 @@ export default function StudentRecords() {
         facts={records.length ? [{ label: 'Classes', value: records.length }, { label: 'Average', value: avg == null ? '—' : `${avg.toFixed(1)}%` }, { label: 'Attendance', value: attAll ? `${Math.round(((att.P + att.L) / attAll) * 100)}%` : '—' }] : []}
         lead={records.length ? `${records.length} class${records.length === 1 ? '' : 'es'} with your scores` : 'Your grades will appear here once your faculty publishes them.'}
       />
+      <CheckinBox onDone={() => api('/me/records').then((d) => setRecords(d.records)).catch(() => {})} />
       {records.length > 0 && (
         <>
           <div className="kpi-row">

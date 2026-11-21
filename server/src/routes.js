@@ -3,7 +3,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
-import { User, Student, Section, Enrollment, Notification, FacultyNotice, audit, notifyGrades, notifySignIn, notifyStudents, showOf } from './models.js';
+import { User, Student, Section, Enrollment, Notification, FacultyNotice, ScoreChange, audit, notifyGrades, notifySignIn, notifyStudents, showOf } from './models.js';
 import { COMPONENTS, DEFAULT_WEIGHTS, MARKS, attendanceItems, cleanScale, computeGrades, scaleOf } from './grading.js';
 import { saveCredentials } from './credentials.js';
 import { HHMM_RE as HHMM, blocksOutside, cleanBlocks, cleanSchedule, legacyFields, modeOf, workHoursOf } from './schedule.js';
@@ -360,7 +360,7 @@ faculty.get(
   '/sections',
   wrap(async (req, res) => {
     const sections = await Section.find({ faculty: req.user._id }).sort({ code: 1 });
-    const enrollments = await Enrollment.find({ section: { $in: sections.map((s) => s._id) } }, 'section scores attendance bonus');
+    const enrollments = await Enrollment.find({ section: { $in: sections.map((s) => s._id) } }, 'section student scores attendance bonus').populate('student', 'name studentNo');
     const bySection = new Map();
     for (const e of enrollments) {
       const k = String(e.section);
@@ -408,6 +408,7 @@ faculty.get(
           gradeDist, // { "2.5": 4, ... } for the current grade
           attendanceRate: att.all ? Math.round((att.ok / att.all) * 1000) / 10 : null,
           sessionCount: s.attendance?.sessions?.length || 0,
+          atRisk: atRiskOf(s, list, Boolean(finalsItemCount || s.gradingMode === 'final')),
         };
       }),
     });
@@ -523,30 +524,98 @@ faculty.put(
     const { studentId, itemId, score } = req.body || {};
     const enrollment = await Enrollment.findOne({ section: req.section._id, student: studentId });
     if (!enrollment) return res.status(404).json({ error: 'Student not in section' });
-
-    const value = score === null || score === '' ? null : Number(score);
-    if (value !== null && !Number.isFinite(value)) return res.status(400).json({ error: 'Invalid score' });
-
-    if (itemId === 'bonus') {
-      enrollment.bonus = value ?? 0;
-    } else {
-      const item = req.section.items.id(itemId);
-      if (!item) return res.status(404).json({ error: 'Item not found' });
-      if (value !== null && (value < 0 || value > item.max))
-        return res.status(400).json({ error: `Score must be between 0 and ${item.max}` });
-      if (value === null) enrollment.scores.delete(String(itemId));
-      else enrollment.scores.set(String(itemId), value);
+    const change = applyScore(req.section, enrollment, itemId, score);
+    if (change?.error) return res.status(change.status || 400).json({ error: change.error });
+    if (change) {
+      await enrollment.save();
+      await logChanges(req, [{ student: enrollment.student, change }], 'edit');
+      await notifyScores(req.section, [{ student: enrollment.student, change }]);
     }
-    await enrollment.save();
-    if (showOf(req.section).scores) {
-      const kind = `score:${itemId}`;
-      if (value === null || (itemId === 'bonus' && !value)) await Notification.deleteOne({ student: studentId, section: req.section._id, kind });
-      else {
-        const item = itemId === 'bonus' ? null : req.section.items.id(itemId);
-        await notifyStudents(req.section, [{ student: enrollment.student, kind, text: item ? `${item.label} · ${value} / ${item.max}` : `Bonus · +${value}` }]);
+    res.json({ grades: computeGrades(req.section, enrollment), undo: await undoSummary(req.section, req.user) });
+  })
+);
+
+// Paste from Excel: many cells at once. Body: { changes: [{ studentId, itemId, score }] }.
+// All or nothing: one invalid cell stops the whole paste. One undo reverts all of it.
+faculty.put(
+  '/sections/:id/scores/bulk',
+  ownSection,
+  wrap(async (req, res) => {
+    const list = Array.isArray(req.body?.changes) ? req.body.changes : [];
+    if (!list.length) return res.status(400).json({ error: 'Nothing to paste.' });
+    if (list.length > 3000) return res.status(400).json({ error: 'That paste is too large (at most 3000 cells).' });
+    const enrollments = await Enrollment.find({ section: req.section._id, student: { $in: list.map((c) => c.studentId).filter((id) => mongoose.isValidObjectId(id)) } }).populate('student', 'name');
+    const byStudent = new Map(enrollments.map((e) => [String(e.student._id), e]));
+    const rows = [];
+    const touched = new Set();
+    for (const c of list) {
+      const e = byStudent.get(String(c.studentId));
+      if (!e) return res.status(404).json({ error: 'A pasted row is not a student in this section.' });
+      const change = applyScore(req.section, e, c.itemId, c.score);
+      if (change?.error) return res.status(400).json({ error: `${e.student.name}: ${change.error}. Nothing was pasted.` });
+      if (change) {
+        rows.push({ student: e.student._id, change });
+        touched.add(e);
       }
     }
-    res.json({ grades: computeGrades(req.section, enrollment) });
+    await Promise.all([...touched].map((e) => e.save()));
+    await logChanges(req, rows, 'paste');
+    await notifyScores(req.section, rows);
+    if (rows.length) audit(req.user, 'scores.paste', sectionLabel(req.section), `${rows.length} score${rows.length === 1 ? '' : 's'} pasted`);
+    res.json({ changed: rows.length, detail: await sectionDetail(req.section), undo: await undoSummary(req.section, req.user) });
+  })
+);
+
+// What "Undo" would revert now: this faculty's latest score change in the section (or null).
+faculty.get(
+  '/sections/:id/scores/undo',
+  ownSection,
+  wrap(async (req, res) => res.json({ undo: await undoSummary(req.section, req.user) }))
+);
+
+// Undo this faculty's latest score change in the section; a paste is undone as a whole. A cell that
+// was changed again since then is left as it is.
+faculty.post(
+  '/sections/:id/scores/undo',
+  ownSection,
+  wrap(async (req, res) => {
+    const last = await lastUndoable(req.section, req.user);
+    if (!last) return res.status(404).json({ error: 'Nothing to undo.' });
+    const batch = await ScoreChange.find({ section: req.section._id, batch: last.batch }).sort({ at: -1 });
+    const enrollments = await Enrollment.find({ section: req.section._id, student: { $in: batch.map((c) => c.student) } });
+    const byStudent = new Map(enrollments.map((e) => [String(e.student), e]));
+    const rows = [];
+    const touched = new Set();
+    let skipped = 0;
+    for (const ch of batch) {
+      const e = byStudent.get(String(ch.student));
+      const now = !e ? undefined : ch.item === 'bonus' ? e.bonus || 0 : e.scores.get(ch.item) ?? null;
+      if (!e || now !== ch.to) { skipped++; continue; }
+      const change = applyScore(req.section, e, ch.item, ch.from);
+      if (change?.error) { skipped++; continue; }
+      if (change) {
+        rows.push({ student: e.student, change });
+        touched.add(e);
+      }
+    }
+    await Promise.all([...touched].map((e) => e.save()));
+    await ScoreChange.updateMany({ section: req.section._id, batch: last.batch }, { $set: { undone: true } });
+    await logChanges(req, rows, 'undo');
+    await notifyScores(req.section, rows);
+    res.json({ undone: rows.length, skipped, detail: await sectionDetail(req.section), undo: await undoSummary(req.section, req.user) });
+  })
+);
+
+// One student's score history in this section, newest first.
+faculty.get(
+  '/sections/:id/students/:studentId/history',
+  ownSection,
+  wrap(async (req, res) => {
+    if (!mongoose.isValidObjectId(req.params.studentId)) return res.status(404).json({ error: 'Not found' });
+    const list = await ScoreChange.find({ section: req.section._id, student: req.params.studentId }).sort({ at: -1 }).limit(300);
+    res.json({
+      changes: list.map((c) => ({ id: c._id, item: c.item, label: c.label, max: c.max, from: c.from, to: c.to, by: c.byName, source: c.source, undone: c.undone, at: c.at })),
+    });
   })
 );
 
@@ -863,6 +932,7 @@ faculty.delete(
     const { deletedCount } = await Enrollment.deleteMany({ section: req.section._id });
     await req.section.deleteOne();
     await FacultyNotice.deleteMany({ section: req.section._id });
+    await ScoreChange.deleteMany({ section: req.section._id });
     audit(req.user, 'section.delete', sectionLabel(req.section), `${deletedCount} enrollments and ${req.section.items.length} items removed`);
     res.json({ ok: true, removedEnrollments: deletedCount });
   })
@@ -876,6 +946,7 @@ faculty.delete(
     if (!mongoose.isValidObjectId(req.params.studentId)) return res.status(404).json({ error: 'Not found' });
     const enrollment = await Enrollment.findOneAndDelete({ section: req.section._id, student: req.params.studentId }).populate('student');
     await FacultyNotice.deleteMany({ section: req.section._id, student: req.params.studentId });
+    await ScoreChange.deleteMany({ section: req.section._id, student: req.params.studentId });
     if (enrollment)
       audit(req.user, 'student.remove', `${enrollment.student?.name} (${enrollment.student?.studentNo})`, sectionLabel(req.section));
     res.json(await sectionDetail(req.section));
@@ -1127,10 +1198,179 @@ faculty.put(
   })
 );
 
+// ---------- Self check-in (attendance by code) ----------
+
+const CODE_STEP = 30 * 1000; // the code changes every 30 seconds
+const checkinOpen = (s) => Boolean(s?.checkin?.secret && s.checkin.until > new Date());
+const checkinCode = (secret, step) => String(parseInt(crypto.createHmac('sha256', secret).update(String(step)).digest('hex').slice(0, 8), 16) % 1e6).padStart(6, '0');
+
+// What the faculty's check-in screen shows: the current code, and who has checked in so far.
+async function checkinStatus(section, s) {
+  const list = await Enrollment.find({ section: section._id }, 'student attendance').populate('student', 'name');
+  const mark = (e) => e.attendance?.get?.(String(s._id));
+  const counts = { P: 0, L: 0, A: 0, E: 0, none: 0 };
+  for (const e of list) counts[mark(e) || 'none']++;
+  const open = checkinOpen(s);
+  const step = Math.floor(Date.now() / CODE_STEP);
+  return {
+    open,
+    code: open ? checkinCode(s.checkin.secret, step) : null,
+    nextChange: open ? (step + 1) * CODE_STEP - Date.now() : null, // ms
+    until: open ? s.checkin.until : null,
+    lateAt: open ? s.checkin.lateAt : null,
+    counts,
+    total: list.length,
+  };
+}
+
+// Open (or reopen) check-in for a session. Body: { minutes (how long it stays open), lateAfter (minutes) }
+faculty.post(
+  '/sections/:id/attendance/sessions/:sid/checkin',
+  ownSection,
+  wrap(async (req, res) => {
+    const s = req.section.attendance?.sessions.id(req.params.sid);
+    if (!s) return res.status(404).json({ error: 'Session not found' });
+    const minutes = Math.min(240, Math.max(5, Number(req.body?.minutes) || 60));
+    const lateAfter = Math.min(minutes, Math.max(0, Number(req.body?.lateAfter ?? 15)));
+    const now = Date.now();
+    s.checkin = { secret: crypto.randomBytes(16).toString('hex'), until: new Date(now + minutes * 60000), lateAt: new Date(now + lateAfter * 60000) };
+    await req.section.save();
+    audit(req.user, 'attendance.checkin', sectionLabel(req.section), `${s.date}${s.label ? ` (${s.label})` : ''} · open ${minutes} min, late after ${lateAfter} min`);
+    res.json(await checkinStatus(req.section, s));
+  })
+);
+faculty.get(
+  '/sections/:id/attendance/sessions/:sid/checkin',
+  ownSection,
+  wrap(async (req, res) => {
+    const s = req.section.attendance?.sessions.id(req.params.sid);
+    if (!s) return res.status(404).json({ error: 'Session not found' });
+    res.json(await checkinStatus(req.section, s));
+  })
+);
+// Close check-in. ?rest=A marks everyone who did not check in (no mark yet) as absent.
+faculty.delete(
+  '/sections/:id/attendance/sessions/:sid/checkin',
+  ownSection,
+  wrap(async (req, res) => {
+    const s = req.section.attendance?.sessions.id(req.params.sid);
+    if (!s) return res.status(404).json({ error: 'Session not found' });
+    s.checkin = undefined;
+    await req.section.save();
+    if (req.query.rest === 'A') {
+      const key = `attendance.${s._id}`;
+      const rest = await Enrollment.find({ section: req.section._id, [key]: { $exists: false } }, 'student');
+      if (rest.length) {
+        await Enrollment.updateMany({ _id: { $in: rest.map((e) => e._id) } }, { $set: { [key]: 'A' } });
+        await notifyAttendance(req.section, s, rest.map((e) => ({ student: e.student, mark: 'A' })));
+      }
+    }
+    res.json(await sectionDetail(req.section));
+  })
+);
+
+// A student checks in with the code on the faculty's screen. The current and the previous code work,
+// so a code typed just as it changes still counts. Present until lateAt, late after.
+router.post(
+  '/me/checkin',
+  rateLimit({ windowMs: 60 * 1000, limit: 10 }),
+  requireAuth,
+  requirePasswordSet,
+  requireRole('student'),
+  wrap(async (req, res) => {
+    const code = String(req.body?.code || '').replace(/\D/g, '');
+    if (code.length !== 6) return res.status(400).json({ error: 'Enter the 6-digit code shown by your teacher.' });
+    const enrollments = await Enrollment.find({ student: req.user.student }, 'section');
+    const sections = await Section.find({ _id: { $in: enrollments.map((e) => e.section) }, 'attendance.sessions.checkin.until': { $gt: new Date() } });
+    const step = Math.floor(Date.now() / CODE_STEP);
+    let found = null;
+    for (const section of sections)
+      for (const s of section.attendance.sessions)
+        if (checkinOpen(s) && [step, step - 1].some((t) => checkinCode(s.checkin.secret, t) === code)) found = { section, s };
+    if (!found) return res.status(400).json({ error: 'That code is wrong or has expired. Check the code on the screen and try again.' });
+    const { section, s } = found;
+    const enrollment = await Enrollment.findOne({ section: section._id, student: req.user.student });
+    const before = enrollment.attendance?.get?.(String(s._id));
+    const where = { section: { code: section.code, subjectTitle: section.subjectTitle }, date: s.date, label: s.label || '' };
+    if (['P', 'L', 'E'].includes(before)) return res.json({ ...where, mark: before, already: true });
+    const mark = new Date() > s.checkin.lateAt ? 'L' : 'P';
+    enrollment.attendance.set(String(s._id), mark);
+    await enrollment.save();
+    await notifyAttendance(section, s, [{ student: enrollment.student, mark }]);
+    res.json({ ...where, mark, already: false });
+  })
+);
+
 router.use('/faculty', faculty);
 router.use('/admin', admin);
 
 // ---------- helpers ----------
+
+// Check and apply one score to an enrollment (not saved yet). Returns the change, null when the
+// value is the same, or { error, status } when it is not allowed.
+function applyScore(section, enrollment, itemId, raw) {
+  const value = raw === null || raw === undefined || raw === '' ? null : Number(raw);
+  if (value !== null && !Number.isFinite(value)) return { error: 'Invalid score' };
+  if (itemId === 'bonus') {
+    const from = enrollment.bonus || 0;
+    const to = value ?? 0;
+    if (from === to) return null;
+    enrollment.bonus = to;
+    return { item: 'bonus', label: 'Bonus', max: null, from, to };
+  }
+  const item = mongoose.isValidObjectId(itemId) ? section.items.id(itemId) : null;
+  if (!item) return { error: 'Item not found', status: 404 };
+  if (value !== null && (value < 0 || value > item.max)) return { error: `Score must be between 0 and ${item.max}` };
+  const from = enrollment.scores.get(String(itemId)) ?? null;
+  if (from === value) return null;
+  if (value === null) enrollment.scores.delete(String(itemId));
+  else enrollment.scores.set(String(itemId), value);
+  return { item: String(itemId), label: item.label, max: item.max, from, to: value };
+}
+
+// Record score changes (one batch = one undo step). rows: [{ student, change }]
+function logChanges(req, rows, source) {
+  if (!rows.length) return null;
+  const batch = crypto.randomBytes(8).toString('hex');
+  return ScoreChange.insertMany(
+    rows.map(({ student, change }) => ({ section: req.section._id, student, ...change, by: req.user._id, byName: req.user.name, batch, source }))
+  );
+}
+
+// Student notices for changed scores (when the section shows scores). rows: [{ student, change }]
+async function notifyScores(section, rows) {
+  if (!rows.length || !showOf(section).scores) return;
+  const cleared = rows.filter(({ change }) => change.to === null || (change.item === 'bonus' && !change.to));
+  const set = rows.filter((r) => !cleared.includes(r));
+  if (cleared.length)
+    await Notification.deleteMany({ section: section._id, $or: cleared.map(({ student, change }) => ({ student, kind: `score:${change.item}` })) });
+  await notifyStudents(
+    section,
+    set.map(({ student, change }) => ({
+      student,
+      kind: `score:${change.item}`,
+      text: change.item === 'bonus' ? `Bonus · +${change.to}` : `${change.label} · ${change.to} / ${change.max}`,
+    }))
+  );
+}
+
+const lastUndoable = (section, user) =>
+  ScoreChange.findOne({ section: section._id, by: user._id, undone: false, source: { $ne: 'undo' }, at: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } })
+    .sort({ at: -1 })
+    .populate('student', 'name');
+
+// Short description of what Undo would revert, e.g. { label: 'Q1 · Dela Cruz, Juan (18 → 20)' }.
+async function undoSummary(section, user) {
+  const last = await lastUndoable(section, user);
+  if (!last) return null;
+  const count = await ScoreChange.countDocuments({ section: section._id, batch: last.batch });
+  const v = (n) => (n === null ? 'blank' : n);
+  const label =
+    last.source === 'paste' && count > 1
+      ? `Paste of ${count} scores`
+      : `${last.label} · ${last.student?.name || 'student'} (${v(last.from)} → ${v(last.to)})`;
+  return { label, count, at: last.at };
+}
 
 const MARK_WORD = { P: 'Present', L: 'Late', A: 'Absent', E: 'Excused' };
 const shortDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
@@ -1141,6 +1381,35 @@ const notifyAttendance = (section, session, marks) =>
     : null;
 
 const sectionLabel = (s) => [s.code, s.term, s.academicYear].filter(Boolean).join(' · ');
+
+// Students who may need help in a section, for the faculty dashboard: failing the current grade,
+// 3 or more absences, or 2 or more items without a score that classmates already have.
+const RISK_ABSENCES = 3;
+const RISK_MISSING = 2;
+function atRiskOf(section, enrollments, useFinal) {
+  const isFinalItem = (i) => i.component === 'CPT' || (i.component !== 'MPT' && i.period === 'POST');
+  const termItems = section.items.filter((i) => useFinal || !isFinalItem(i));
+  const has = (e, id) => (e.scores?.get ? e.scores.get(String(id)) : e.scores?.[String(id)]) != null;
+  // Items somebody in the class already has a score for: the rest are not given yet.
+  const given = termItems.filter((i) => enrollments.some((e) => has(e, i._id)));
+  const out = [];
+  for (const e of enrollments) {
+    if (!e.student?._id) continue;
+    const grades = computeGrades(section, e);
+    const g = useFinal ? grades.final : grades.midterm;
+    const failing = given.length > 0 && (g.equivalent === 'R' || g.equivalent === 'Repeat');
+    const absences = attendanceSummary(section, e).counts?.A || 0;
+    const missing = given.filter((i) => !has(e, i._id)).map((i) => i.label);
+    const reasons = [];
+    if (failing) reasons.push('failing');
+    if (absences >= RISK_ABSENCES) reasons.push('absences');
+    if (missing.length >= RISK_MISSING) reasons.push('missing');
+    if (reasons.length)
+      out.push({ student: { id: e.student._id, name: e.student.name, studentNo: e.student.studentNo }, percent: g.percent, equivalent: g.equivalent, term: useFinal ? 'final' : 'midterm', absences, missing, reasons });
+  }
+  // Most reasons first, then lowest grade.
+  return out.sort((a, b) => b.reasons.length - a.reasons.length || (a.percent ?? 0) - (b.percent ?? 0));
+}
 
 function sectionSummary(s) {
   return {
@@ -1173,7 +1442,7 @@ function attendanceDto(section) {
   return {
     component: att.component || '',
     late: att.late ?? 0.5,
-    sessions: (att.sessions || []).map((s) => ({ id: s._id, date: s.date, period: s.period, label: s.label || '' })),
+    sessions: (att.sessions || []).map((s) => ({ id: s._id, date: s.date, period: s.period, label: s.label || '', checkinOpen: checkinOpen(s) })),
   };
 }
 

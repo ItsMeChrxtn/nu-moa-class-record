@@ -2602,3 +2602,67 @@ code, kbd { background: var(--surface-2); border-color: var(--line-2); color: va
 .ld-bar { width: 240px; height: 6px; border-radius: 3px; }
 .ld-bar i { border-radius: 3px; }
 .ld-label { font-size: 0.95rem; }
+/* Undo and score history on the grade sheet */
+.undo-hint { color: var(--ink-2); max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-list { border: 1px solid var(--line); border-radius: 12px; max-height: 420px; overflow: auto; }
+.hist-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.hist-row:last-child { border-bottom: 0; }
+.hist-row.undone { opacity: 0.55; }
+.hist-row.undone .hist-vals { text-decoration: line-through; }
+.hist-what { display: grid; gap: 2px; }
+.hist-what strong { font-size: 0.88rem; }
+.hist-vals { font-size: 0.84rem; color: var(--ink-2); }
+.hist-vals code { font-weight: 700; color: var(--ink); }
+.hist-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; font-size: 0.75rem; color: var(--ink-3); text-align: right; }
+.hist-tag { padding: 2px 6px; border-radius: 5px; background: var(--blue-soft); color: var(--blue); font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+.hist-tag.muted { background: var(--line); color: var(--ink-2); }
+/* Faculty dashboard: students at risk */
+.risk { padding: 18px 20px 14px; display: grid; gap: 12px; margin-top: 18px; }
+.risk-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.risk-head h2 { margin: 1px 0 0; font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; }
+.risk-head .seg { display: flex; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.risk-head .seg button { border: 0; background: none; padding: 6px 10px; border-radius: 7px; font-family: var(--body); font-size: 0.78rem; font-weight: 600; color: var(--ink-2); }
+.risk-head .seg button b { font-family: var(--mono); font-size: 0.72rem; margin-left: 3px; color: var(--ink-3); }
+.risk-head .seg button[aria-selected='true'] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px #0f172a1f; }
+.risk-empty { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--teal-soft, #dff5f1); color: var(--teal); font-size: 0.86rem; }
+.risk-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.risk-list li + li { border-top: 1px solid var(--line); }
+.risk-row { display: grid; grid-template-columns: 82px minmax(140px, 1fr) minmax(0, 2fr) 16px; align-items: center; gap: 12px; padding: 10px 14px; color: inherit; text-decoration: none; }
+.risk-row:hover { background: #f8fafc; }
+.risk-row > .icon { color: var(--ink-3); }
+.risk-sec { justify-self: start; padding: 3px 8px; border-radius: 6px; background: var(--c-soft); color: var(--c-ink); font-family: var(--mono); font-size: 0.72rem; font-weight: 700; }
+.risk-who { display: grid; min-width: 0; }
+.risk-who strong { font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.risk-who small { font-family: var(--mono); font-size: 0.7rem; color: var(--ink-3); }
+.risk-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.risk-tag { padding: 3px 8px; border-radius: 6px; font-size: 0.74rem; font-weight: 600; white-space: nowrap; }
+.risk-tag.fail { background: var(--red-soft); color: var(--red-ink); }
+.risk-tag.abs { background: var(--amber-soft); color: var(--amber-ink); }
+.risk-tag.miss { background: var(--blue-soft); color: var(--blue); }
+.risk-more { justify-self: start; color: var(--blue); }
+@media (max-width: 720px) {
+  .risk-row { grid-template-columns: 1fr 16px; }
+  .risk-sec, .risk-tags { grid-column: 1; }
+}
+/* Attendance check-in code */
+.btn.ci-on { border-color: var(--teal); color: var(--teal); }
+.ci-live { display: grid; justify-items: center; gap: 10px; text-align: center; }
+.ci-how { margin: 0; font-size: 0.88rem; color: var(--ink-2); }
+.ci-code { font-family: var(--mono); font-size: clamp(3rem, 12vw, 4.6rem); font-weight: 800; letter-spacing: 0.08em; color: var(--blue); line-height: 1.1; padding: 10px 22px; border: 2px solid var(--line); border-radius: 18px; background: var(--bg); }
+.ci-timer { width: 100%; max-width: 320px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.ci-timer span { display: block; height: 100%; background: var(--blue); transition: width 0.5s linear; }
+.ci-sub { margin: 0; font-size: 0.8rem; color: var(--ink-2); }
+.ci-tally { justify-content: center; }
+.ci-setup { display: grid; gap: 12px; }
+.ci-setup select { height: 40px; }
+/* Student page: attendance check-in */
+.checkin-box { display: grid; grid-template-columns: auto minmax(0, 1fr) 150px auto; align-items: center; gap: 14px; padding: 14px 18px; margin: 16px 0; }
+.checkin-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: var(--blue-soft); color: var(--blue); }
+.checkin-text { display: grid; gap: 2px; }
+.checkin-text strong { font-size: 0.95rem; }
+.checkin-text span { font-size: 0.82rem; color: var(--ink-2); }
+.checkin-input { height: 44px; text-align: center; font-family: var(--mono); font-size: 1.3rem; font-weight: 700; letter-spacing: 0.2em; }
+@media (max-width: 640px) {
+  .checkin-box { grid-template-columns: auto 1fr; }
+  .checkin-input, .checkin-box .btn { grid-column: 1 / -1; width: 100%; }
+}

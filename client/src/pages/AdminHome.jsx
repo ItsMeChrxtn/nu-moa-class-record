@@ -38,6 +38,8 @@ const ACTIONS = {
   'student.remove': 'Removed student',
   'student.reset-password': 'Reset student password',
   'student.view-temp-password': 'Viewed student temporary password',
+  'scores.paste': 'Pasted scores',
+  'attendance.checkin': 'Opened attendance check-in',
 };
 const DANGER = new Set(['section.delete', 'item.delete', 'student.remove', 'faculty.delete', 'faculty.disable']);
 
