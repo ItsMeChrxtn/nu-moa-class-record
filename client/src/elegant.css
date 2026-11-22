@@ -1,0 +1,121 @@
+/* ═════════════ Elegant layer ═════════════
+   Loaded last. Same structure; a more refined voice: Fraunces display serif for greetings,
+   headlines and figures, a deeper navy, a muted antique gold, hairline gold rules. */
+
+:root {
+  --navy: #1a2163;
+  --navy-2: #141a52;
+  --navy-3: #0e1340;
+  --gold-e: #c9a227;
+  --gold-e-2: #b08d1c;
+  --gold-e-soft: #f6efd9;
+  --display-e: 'Fraunces', 'Georgia', serif;
+  --page: #f5f4f0;
+  --line: #e7e4dc;
+  --c1: #1a2163; --c2: #c9a227; --c3: #8d94c4;
+}
+body, .shell-main, .main { background: var(--page) !important; }
+
+/* Rail: deep navy, gold hairline on the active item */
+.side, .side.rail { background: var(--navy) !important; background-image: none !important; }
+.side.rail .side-link.on { background: #ffffff14 !important; color: #fff !important; box-shadow: inset 0 0 0 1px #ffffff1f !important; }
+.side.rail .side-link.on .icon { color: var(--gold-e) !important; }
+.side.rail .side-link.on::after { background: var(--gold-e); width: 3px; }
+.rail-brand { color: var(--gold-e); }
+
+/* Hero: navy with the campus, serif greeting, gold italic name */
+.tile.hero-tile, .hero-tile { background: var(--navy) !important; box-shadow: 0 30px 60px -40px #0e1340 !important; }
+.hero-tile::before { background: radial-gradient(90% 100% at 0% 100%, var(--navy-3), transparent 70%); }
+.hero-photo::after { background: linear-gradient(0deg, #141a52e6, transparent 60%), #1a216340; }
+.hero-tile h1 { font-family: var(--display-e) !important; font-weight: 500 !important; font-size: 2.1rem !important; letter-spacing: -0.015em !important; line-height: 1.1 !important; }
+.hero-tile h1 .accent { font-style: italic; font-weight: 400; color: var(--gold-e) !important; }
+.hero-meta { background: transparent; border: 1px solid #c9a22766; color: #e8d8a6; font-weight: 500; letter-spacing: 0.02em; }
+.hero-date { letter-spacing: 0.02em; }
+.hero-actions .btn.primary { background: var(--gold-e) !important; border-color: var(--gold-e) !important; color: var(--navy-3) !important; box-shadow: none !important; border-radius: 999px !important; padding: 0 20px !important; }
+.hero-actions .btn.primary:not(:disabled):hover { background: #d6b13a !important; }
+.next-class, .hero-tile .checkin-box { border-radius: 16px !important; }
+.nc-when b { font-family: var(--display-e); font-weight: 600; font-size: 1.2rem; color: var(--navy); }
+.nc-tag { color: var(--gold-e-2); }
+.nc-room { background: var(--gold-e-soft); color: #7a6214; }
+.nc-go { background: var(--navy); border-radius: 999px; }
+
+/* Number tiles: serif figures, small-caps labels */
+.mini-value, .kpi-value, .ring-num { font-family: var(--display-e) !important; font-weight: 500 !important; letter-spacing: -0.01em !important; }
+.mini-value { font-size: 1.85rem; color: var(--navy-3); }
+.mini-value small { font-family: 'Inter', sans-serif; }
+.mini-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8a8673; }
+.tone-blue .mini-icon, .tone-green .mini-icon { background: #eef0f8; color: var(--navy); }
+.tone-gold .mini-icon, .tone-rose .mini-icon { background: var(--gold-e-soft); color: var(--gold-e-2); }
+.tone-blue .mini-meter i, .tone-green .mini-meter i { background: var(--navy); }
+.tone-gold .mini-meter i, .tone-rose .mini-meter i { background: var(--gold-e); }
+.mini-meter { height: 3px; }
+
+/* Tiles: warm hairline, serif titles */
+.tile:not(.hero-tile), .bento .chart-card, .bento .dash-table, .bento .risk { border-color: var(--line) !important; box-shadow: 0 1px 0 #1a21630a, 0 12px 30px -24px #1a216340 !important; }
+.tile-head h3, .chart-card h3, .ch-head h3, .dash-table-head h3, .risk h2 { font-family: var(--display-e) !important; font-weight: 500 !important; font-size: 1.15rem !important; letter-spacing: -0.005em !important; color: var(--navy-3) !important; }
+.tile-link { background: transparent; border: 1px solid var(--line); color: var(--navy); }
+.tile-link:hover { background: var(--gold-e-soft); border-color: #e2d3a4; }
+
+/* Week and classes */
+.week-col.is-today { background: #fff; box-shadow: inset 0 0 0 1px var(--gold-e); }
+.week-col.is-today .week-day { color: var(--gold-e-2); }
+.week-chip, .week-chip.sc-2 { background: var(--navy); }
+.week-chip.sc-1, .week-chip.sc-3, .week-chip.sc-5 { background: var(--gold-e); color: var(--navy-3); }
+.cr-code, .class-row.sc-2 .cr-code { background: var(--navy); font-family: var(--display-e); font-weight: 600; font-size: 0.95rem; }
+.class-row.sc-1 .cr-code, .class-row.sc-3 .cr-code, .class-row.sc-5 .cr-code { background: var(--gold-e); color: var(--navy-3); }
+.class-row { background: #faf9f6; }
+.cr-avg em { background: var(--navy); }
+
+/* Charts */
+.ch-col-bar, .hist-bar, .ch-col:nth-child(even) .ch-col-bar { background: var(--navy) !important; }
+.ch-row-bar, .ch-rank-bar i { background: var(--navy) !important; }
+.ch-rank-tile, .dt-tile { background: #eef0f8 !important; color: var(--navy) !important; font-family: var(--display-e); }
+.ch-rank-tile.first, .dt-tile.sc-1, .dt-tile.sc-3, .dt-tile.sc-5 { background: var(--gold-e-soft) !important; color: var(--gold-e-2) !important; }
+
+/* Buttons, tabs and headers elsewhere */
+.btn.primary, .btn.gold { background: var(--navy) !important; border-color: var(--navy) !important; }
+.btn.primary:not(:disabled):hover { background: var(--navy-2) !important; }
+.view-tabs button[aria-selected='true'], .term-tabs button[aria-selected='true'], .tabs button[aria-selected='true'] { color: var(--navy) !important; box-shadow: inset 0 -2px 0 var(--gold-e) !important; }
+.page-head:not(.page-head-welcome) h1 { font-family: var(--display-e) !important; font-weight: 500 !important; font-size: 1.8rem !important; }
+.page-head:not(.page-head-welcome) h1::before { background: var(--gold-e) !important; width: 3px !important; }
+.hero-compact .hero-inner { background: var(--navy) !important; }
+.hero-compact h1 { font-family: var(--display-e) !important; font-weight: 500 !important; font-size: 2rem !important; }
+.hero-compact .eyebrow { color: var(--gold-e) !important; }
+.hero-compact .sched-chip b { background: var(--gold-e) !important; }
+.code-badge { font-family: var(--display-e) !important; font-weight: 600 !important; color: var(--navy) !important; }
+
+/* ───────── Sign-in ───────── */
+.lg { background: #fbfaf7; }
+.lg-brand strong { font-family: var(--display-e); font-weight: 600; font-size: 1.1rem; color: var(--navy-3); }
+.lg-main h1 { font-family: var(--display-e); font-weight: 500; font-size: 2.6rem; letter-spacing: -0.02em; color: var(--navy-3); }
+.lg-main h1::after { content: ''; display: block; width: 44px; height: 2px; margin-top: 18px; background: var(--gold-e); }
+.lg-lead { margin-top: 16px; }
+.lg-field input { border-color: #e1ddd2; background: #fff; box-shadow: none; }
+.lg-field input:focus { border-color: var(--navy) !important; box-shadow: 0 0 0 4px #1a21631a !important; }
+.lg-forgot { color: var(--navy); }
+.lg-submit { background: var(--navy); border-radius: 999px; letter-spacing: 0.01em; }
+.lg-submit:hover:not(:disabled) { background: var(--navy-2); }
+.lg-submit:disabled { background: var(--navy); }
+.lg-help { border-top-color: #ebe7dd; }
+.lg-photo::before { background: linear-gradient(0deg, #0e1340 0%, #0e1340d9 30%, #0e134000 64%), linear-gradient(180deg, #0e134066 0%, transparent 25%); }
+.lg-pill { background: transparent; border: 1px solid #ffffff59; color: #fff; backdrop-filter: blur(6px); }
+.lg-caption h2 { font-family: var(--display-e); font-weight: 400; font-size: clamp(2.1rem, 3.2vw, 3rem); line-height: 1.08; letter-spacing: -0.02em; }
+.lg-caption h2 em { font-style: italic; color: var(--gold-e); }
+.lg-facts { border-top-color: #c9a22766; }
+.lg-facts dt { font-family: var(--display-e); font-weight: 500; font-size: 1.05rem; color: var(--gold-e); }
+
+/* Popups */
+.nu-swal-title, .nu-toast-title { font-family: var(--display-e) !important; font-weight: 500 !important; }
+.nu-toast-bar, .topline i { background: var(--gold-e) !important; }
+
+@media (max-width: 960px) {
+  .lg-main h1 { font-size: 2.1rem; }
+  .lg-caption h2 { font-size: 1.6rem; }
+}
+@media (max-width: 640px) {
+  .hero-tile h1 { font-size: 1.65rem !important; }
+  .mini-value { font-size: 1.5rem; }
+}
+.lg-caption h2, .lg-main h1, .lg-brand strong, .lg-facts dt { font-family: var(--display-e) !important; }
+.lg-caption h2 { font-weight: 400 !important; }
+.lg-main h1 { font-weight: 500 !important; }

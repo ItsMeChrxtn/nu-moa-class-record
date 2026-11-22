@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { activity } from './api.js';
-import { PixelLoader, ProgressOverlay, SwalCard, SweetAlert } from './Feedback.jsx';
+import { PixelLoader, ProgressOverlay } from './Feedback.jsx';
+import { ask, notify } from './swal.js';
 
 const paths = {
   logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></>,
@@ -180,7 +181,8 @@ function CampusArt() {
 export function WelcomeBanner({ eyebrow, title, lead, actions }) {
   const d = new Date();
   return (
-    <section className="page-head">
+    <section className="page-head page-head-welcome">
+      <div className="ph-photo" aria-hidden="true" />
       <div className="page-head-text">
         <p className="page-head-meta">
           <span>{d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
@@ -468,19 +470,23 @@ const UIContext = createContext(null);
 
 const MIN_RUN = 400; // ms the progress line stays at least, so it never just flickers
 const DONE_PAUSE = 200; // ms showing 100% before it fades
-const ALERT_MS = { success: 1900, info: 5000, error: 0, warning: 0 }; // success closes itself; errors wait for OK
+
+// A confirmed delete fades its row / card out while the server removes it.
+const LEAVE_SEL = 'tr, li, .section-card, .roll-card, .att-sess, .acct-row, .roster-row, .tt-block';
+let lastPointer = null;
+if (typeof document !== 'undefined') document.addEventListener('pointerdown', (e) => { lastPointer = e.target; }, true);
+const clearLeaving = () => document.querySelectorAll('.is-leaving').forEach((el) => el.classList.remove('is-leaving'));
 
 export function UIProvider({ children }) {
-  const [alerts, setAlerts] = useState([]); // corner notifications
-  const [dialog, setDialog] = useState(null);
   const [progress, setProgress] = useState(null); // { label, value, done }
   const run = useRef({ active: new Map(), shownAt: 0, failed: false, timer: null });
 
-  // toast(message, 'success' | 'error' | 'info', title?) shows a notification in the corner.
+  // toast(message, 'success' | 'error' | 'info' | 'warning', title?): SweetAlert2.
+  // Success / info: a toast in the corner that closes itself. Error / warning: a popup that waits for OK.
   const toast = useCallback((message, type = 'success', title) => {
-    setAlerts((a) => [...a, { id: Math.random(), message, type, title, duration: ALERT_MS[type] || ALERT_MS.info }]);
+    if (type === 'error') clearLeaving();
+    notify(message, type, title);
   }, []);
-  const closeAlert = useCallback((id) => setAlerts((a) => a.filter((x) => x.id !== id)), []);
 
   // Loading bar: follows every save / delete / download announced by api.js.
   useEffect(() => {
@@ -541,53 +547,23 @@ export function UIProvider({ children }) {
     };
   }, []);
 
-  const confirm = useCallback((opts) => new Promise((resolve) => setDialog({ ...opts, resolve })), []);
-
-  const close = (ok) => {
-    dialog.resolve(ok);
-    setDialog(null);
-  };
+  // confirm({ title, message, confirmLabel, danger, requireText }) -> Promise<boolean>, SweetAlert2.
+  const confirm = useCallback(async (opts) => {
+    const origin = lastPointer?.closest?.(LEAVE_SEL);
+    const ok = await ask(opts);
+    if (ok && opts.danger && origin?.isConnected) {
+      origin.classList.add('is-leaving');
+      // If the item is still there after a while (kept, or the request failed), bring it back.
+      setTimeout(() => origin.isConnected && origin.classList.remove('is-leaving'), 4000);
+    }
+    return ok;
+  }, []);
 
   return (
     <UIContext.Provider value={{ toast, confirm }}>
       {children}
       {progress && <ProgressOverlay progress={progress} />}
-      {!progress && alerts[0] && !dialog && <SweetAlert key={alerts[0].id} alert={alerts[0]} count={alerts.length} onClose={closeAlert} />}
-      {dialog && <ConfirmDialog dialog={dialog} close={close} />}
     </UIContext.Provider>
-  );
-}
-
-// requireText: the user must type this exact text before the confirm button enables.
-function ConfirmDialog({ dialog, close }) {
-  const [typed, setTyped] = useState('');
-  const locked = dialog.requireText && typed.trim().toUpperCase() !== dialog.requireText.toUpperCase();
-  useEffect(() => {
-    const esc = (e) => e.key === 'Escape' && close(false);
-    document.addEventListener('keydown', esc);
-    return () => document.removeEventListener('keydown', esc);
-  }, [close]);
-  return (
-    <SwalCard type={dialog.danger ? 'warning' : 'question'} title={dialog.title} onClose={() => close(false)}>
-        {dialog.message && <p>{dialog.message}</p>}
-        {dialog.requireText && (
-          <label className="field swal-field">
-            <span>Type <code>{dialog.requireText}</code> to confirm</span>
-            <input
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !locked && close(true)}
-              autoFocus
-            />
-          </label>
-        )}
-        <div className="swal-actions">
-          <button type="button" className="btn" onClick={() => close(false)}>Cancel</button>
-          <button type="button" className={`btn ${dialog.danger ? 'danger' : 'primary'}`} onClick={() => close(true)} disabled={locked} autoFocus={!dialog.requireText}>
-            {dialog.confirmLabel || 'Continue'}
-          </button>
-        </div>
-    </SwalCard>
   );
 }
 

@@ -3,7 +3,8 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { ChartCard, ChartEmpty, Donut, Line, RankList } from '../Charts.jsx';
 import { useAuth } from '../auth.jsx';
-import { Avatar, EmptyState, ErrorState, Icon, Modal, PageLoader, Stat, WelcomeBanner, firstName, initials, titleCase, useUI } from '../ui.jsx';
+import { Avatar, EmptyState, ErrorState, Icon, Modal, PageLoader, firstName, initials, titleCase, useUI } from '../ui.jsx';
+import { Bento, HeroTile, MiniStat } from '../Bento.jsx';
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: 'layers' },
@@ -131,25 +132,28 @@ function AdminDashboard({ overview, user }) {
   const top = (faculty || []).filter((f) => f.students > 0 || f.sections > 0).sort((a, b) => b.students - a.students).slice(0, 5);
   const maxStudents = Math.max(1, ...top.map((f) => f.students));
   return (
-    <>
-      <WelcomeBanner
-        eyebrow="Administrator · NU MOA"
+    <Bento layout="admin">
+      <HeroTile
+        meta="Administrator · NU MOA"
         title={<>Welcome back, <span className="accent">{firstName(user.name)}</span></>}
         lead="Faculty accounts, sections and student records across NU MOA."
-        facts={[{ label: 'Faculty', value: overview.faculty }, { label: 'Sections', value: overview.sections }, { label: 'Students', value: overview.students }]}
         actions={<Link className="btn primary" to="/admin?tab=faculty"><Icon name="userPlus" size={16} /> Faculty accounts</Link>}
-      />
-      <div className="kpi-row">
-        <Stat tone="blue" icon="users" label="Faculty" value={overview.faculty} sub={overview.disabled ? `${overview.disabled} disabled` : 'All active'} />
-        <Stat tone="gold" icon="layers" label="Sections" value={overview.sections} sub={`${overview.published} published`} />
-        <Stat tone="blue" icon="user" label="Students" value={overview.students} sub={`${overview.enrollments} enrollments`} />
-        <Stat tone="gold" icon="key" label="Student accounts" value={<>{overview.activeAccounts ?? 0}<small> / {overview.accounts ?? 0}</small></>} sub="signed in" />
-      </div>
-      <div className="dash-grid">
-        <ChartCard className="dash-wide" title="Activity" sub={`Actions per day · last 14 days · ${activity.reduce((a, d) => a + d.value, 0)} total`}>
+      >
+        <nav className="quick-links" aria-label="Shortcuts">
+          {[['faculty', 'users', 'Faculty'], ['sections', 'book', 'Sections'], ['students', 'user', 'Students'], ['activity', 'list', 'Activity']].map(([k, ic, label]) => (
+            <Link key={k} to={`/admin?tab=${k}`} className="quick-link"><Icon name={ic} size={16} /><span>{label}</span></Link>
+          ))}
+        </nav>
+      </HeroTile>
+      <MiniStat area="s1" tone="blue" icon="users" label="Faculty" value={overview.faculty} sub={overview.disabled ? `${overview.disabled} disabled` : 'All active'} />
+      <MiniStat area="s2" tone="gold" icon="layers" label="Sections" value={overview.sections} meter={overview.sections ? (overview.published / overview.sections) * 100 : 0} sub={`${overview.published} published`} />
+      <MiniStat area="s3" tone="green" icon="user" label="Students" value={overview.students} sub={`${overview.enrollments} enrollments`} />
+      <MiniStat area="s4" tone="rose" icon="key" label="Accounts signed in" value={<>{overview.activeAccounts ?? 0}<small> / {overview.accounts ?? 0}</small></>} meter={overview.accounts ? ((overview.activeAccounts ?? 0) / overview.accounts) * 100 : 0} sub="student accounts" />
+      <>
+        <ChartCard className="ga-trend" title="Activity" sub={`Actions per day · last 14 days · ${activity.reduce((a, d) => a + d.value, 0)} total`}>
           {activity.some((d) => d.value) ? <Line points={activity} height={210} unit=" actions" max={maxAct} /> : <ChartEmpty>No activity in the last 14 days.</ChartEmpty>}
         </ChartCard>
-        <ChartCard title="Student accounts" sub={`${overview.accounts ?? 0} accounts`}>
+        <ChartCard className="ga-grades" title="Student accounts" sub={`${overview.accounts ?? 0} accounts`}>
           <Donut
             parts={[
               { label: 'Signed in', value: overview.activeAccounts ?? 0, color: 'var(--c1)' },
@@ -160,13 +164,13 @@ function AdminDashboard({ overview, user }) {
             centerLabel="accounts"
           />
         </ChartCard>
-        <ChartCard title="Top faculty" sub="By number of students">
+        <ChartCard className="ga-top" title="Top faculty" sub="By number of students">
           {faculty == null ? <ChartEmpty>Loading…</ChartEmpty> : top.length ? (
             <RankList max={maxStudents} items={top.map((f) => ({ key: f.id, code: initials(f.name), title: titleCase(f.name), sub: `${f.sections} section${f.sections === 1 ? '' : 's'}`, value: f.students, label: `${f.students}` }))} />
           ) : <ChartEmpty>No sections yet.</ChartEmpty>}
         </ChartCard>
-      </div>
-      <section className="card dash-table">
+      </>
+      <section className="card dash-table" style={{ gridArea: 'recent' }}>
         <header className="dash-table-head">
           <h3>Recent activity</h3>
           <Link className="link-more" to="/admin?tab=activity">View all <Icon name="chevronRight" size={14} /></Link>
@@ -188,7 +192,7 @@ function AdminDashboard({ overview, user }) {
           </table>
         </div>
       </section>
-    </>
+    </Bento>
   );
 }
 

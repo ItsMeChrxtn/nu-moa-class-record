@@ -80,6 +80,9 @@ async function main() {
     mustChangePassword: false,
   });
   await User.create({ username: 'admin', passwordHash, role: 'admin', name: 'DEMO ADMIN', mustChangePassword: false });
+  // More faculty for the admin video (no sections yet, so they can be moved to or deleted).
+  const otherFaculty = await User.create({ username: 'jose.ramos@example.com', passwordHash, role: 'faculty', name: 'JOSE ANTONIO RAMOS', mustChangePassword: false, lastLoginAt: new Date() });
+  await User.create({ username: 'ana.villanueva@example.com', passwordHash, role: 'faculty', name: 'ANA LUISA VILLANUEVA', mustChangePassword: false });
 
   const students = new Map();
   for (const [studentNo, name, email] of STUDENTS) {
@@ -93,6 +96,10 @@ async function main() {
     students.set(FRESH_STUDENT, s);
   }
 
+  // Got an account from another faculty's class and has not used the temporary password yet.
+  const shared = await Student.create({ studentNo: '2024-100213', name: 'SANTIAGO, RICO JOHN ABAD', course: 'BSIT-MWA-MNL', email: 'santiago@example.com' });
+  await User.create({ username: shared.studentNo, passwordHash: await hashPassword('Temp#2026'), role: 'student', name: shared.name, student: shared._id, accountBy: otherFaculty._id, credentialsSentAt: new Date() });
+
   for (const def of SECTIONS) {
     const section = await Section.create({
       code: def.code, subjectCode: def.subjectCode, subjectTitle: def.subjectTitle, units: def.units,
@@ -104,13 +111,16 @@ async function main() {
       faculty: faculty._id,
       items: def.items.map(([component, period, label, max]) => ({ component, period, label, max })),
       published: def.published || publishAll,
+      // Four class meetings so far; attendance counts toward Class Participation.
+      attendance: { component: 'CP', sessions: ['2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28'].map((date) => ({ date, period: 'MID' })) },
     });
     const roster = [...def.students.map(([no]) => no), ...(students.has(FRESH_STUDENT) ? [FRESH_STUDENT] : [])];
     for (const no of roster) {
       const skill = 0.7 + rand() * 0.3;
       const scores = {};
       for (const item of section.items) scores[String(item._id)] = Math.min(item.max, Math.max(0, Math.round(item.max * (skill - 0.08 + rand() * 0.16))));
-      await Enrollment.create({ section: section._id, student: students.get(no)._id, scores });
+      const attendance = Object.fromEntries(section.attendance.sessions.map((x) => [String(x._id), rand() < 0.85 ? 'P' : rand() < 0.6 ? 'L' : 'A']));
+      await Enrollment.create({ section: section._id, student: students.get(no)._id, scores, attendance });
     }
     await notifyGrades(section);
     console.log(`  ✓ ${def.code}: ${roster.length} students, ${section.items.length} items`);

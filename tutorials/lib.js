@@ -120,7 +120,7 @@ const CURSOR = `
 })();`;
 
 // Helpers the scripts use: a visible cursor that glides to elements, human-speed typing.
-function helpers(page) {
+function helpers(page, ctl = { offline: (fn) => fn() }) {
   let pos = { x: SIZE.width / 2, y: SIZE.height / 2 };
   const h = {
     page,
@@ -137,8 +137,14 @@ function helpers(page) {
     },
     async point(target, ms) {
       const loc = typeof target === 'string' ? page.locator(target).first() : target;
-      await loc.scrollIntoViewIfNeeded();
-      const b = await loc.boundingBox();
+      await loc.waitFor({ state: 'visible' });
+      let b = await loc.boundingBox();
+      // Keep targets clear of the sticky header and the caption area: scroll them to the middle.
+      if (b && (b.y < 90 || b.y + Math.min(b.height, 40) > SIZE.height - 90)) {
+        await loc.evaluate((el) => el.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+        await sleep(700);
+        b = await loc.boundingBox();
+      }
       if (!b) throw new Error(`not visible: ${target}`);
       await h.moveTo(b.x + b.width / 2, b.y + Math.min(b.height / 2, 18), ms);
       return loc;
@@ -152,11 +158,115 @@ function helpers(page) {
     },
     async type(target, text, { delay = 55 } = {}) {
       await h.click(target);
+      await page.keyboard.press('Control+A'); // replace whatever the field already holds
       await page.keyboard.type(text, { delay });
     },
     async hover(target, ms = 1200) {
       await h.point(target);
       await sleep(ms);
+    },
+    // Title cards are served on the app's origin, so the screencast never changes process.
+    async showCard(html) {
+      await page.route(`${BASE}/__card`, (r) => r.fulfill({ contentType: 'text/html', body: html }));
+      await page.goto(`${BASE}/__card`, { waitUntil: 'networkidle' });
+      await page.unroute(`${BASE}/__card`);
+      await h.replaceCursor();
+    },
+    // Signs in through the API (no screen), for videos that start after the sign-in part.
+    async signInQuietly(username, password) {
+      const res = await page.request.post(`${BASE}/api/auth/login`, { data: { username, password } });
+      if (!res.ok()) throw new Error(`sign-in failed for ${username}: ${res.status()}`);
+    },
+    // Clicks something that downloads a file, waits for the download, then closes the Success pop-up.
+    // Returns the saved file's path (in .cache/downloads), so the video can open it afterwards.
+    async download(target) {
+      const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), h.click(target)]);
+      const dir = path.join(CACHE, 'downloads');
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, dl.suggestedFilename());
+      await dl.saveAs(file);
+      await h.ok(4000);
+      h.lastDownload = file;
+      return file;
+    },
+    // Work that should not show in the video (e.g. Excel printing a file): the recording pauses.
+    offline: (fn) => ctl.offline(fn),
+    // Opens downloaded files in the file viewer. Each item: { file, kind: 'xlsx' | 'pdf',
+    // sheets: name => bool (xlsx), pageNo (pdf), name, sub }. Excel sheets become one page each.
+    async openFile(items) {
+      const pv = await import('./preview.js');
+      const pages = await ctl.offline(async () => {
+        const dir = path.join(CACHE, 'previews', String(Date.now()));
+        fs.mkdirSync(dir, { recursive: true });
+        const jobs = [];
+        for (const it of items) {
+          if (it.kind === 'pdf') {
+            jobs.push({ pdf: it.file, pageNo: it.pageNo || 1, meta: { kind: 'pdf', name: it.name || path.basename(it.file), sub: it.sub } });
+            continue;
+          }
+          const sheets = await pv.xlsxToPdfs(it.file, path.join(dir, String(jobs.length)));
+          for (const [sheet, pdf] of Object.entries(sheets)) {
+            if (it.sheets && !it.sheets(sheet)) continue;
+            jobs.push({ pdf, meta: { kind: 'xlsx', name: it.name || path.basename(it.file), sub: it.sub || `Sheet: ${sheet}` } });
+          }
+        }
+        jobs.forEach((j, i) => (j.png = path.join(dir, `${i}.png`)));
+        await pv.pdfsToPngs(jobs);
+        return jobs.map((j, i) => ({ ...j.meta, src: `/__viewer/${i}.png`, png: j.png }));
+      });
+      const html = pv.viewerHtml(pages);
+      await page.route(`${BASE}/__viewer**`, (r) => {
+        const p = new URL(r.request().url()).pathname;
+        const m = /^\/__viewer\/(\d+)\.png$/.exec(p);
+        if (m) return r.fulfill({ contentType: 'image/png', body: fs.readFileSync(pages[+m[1]].png) });
+        return r.fulfill({ contentType: 'text/html', body: html });
+      });
+      await page.goto(`${BASE}/__viewer`, { waitUntil: 'networkidle' });
+      await page.waitForFunction(() => window.ready);
+      await page.unroute(`${BASE}/__viewer**`);
+      await h.page.mouse.move(-20, -20); // keep the cursor out of the way
+      return pages.length;
+    },
+    // Back from the file viewer to a page of the app.
+    async backTo(url) {
+      await page.goto(`${BASE}${url}`, { waitUntil: 'networkidle' });
+      await h.replaceCursor();
+      await h.ok(1200);
+    },
+    async view(i, ms = 600) {
+      await page.evaluate((n) => window.view(n), i);
+      await sleep(ms);
+    },
+    // Zooms the viewer so the point (x, y) — fractions of the page — is centred, then waits.
+    async zoom(x, y, scale, ms = 1800) {
+      await page.evaluate(([a, b, c]) => window.zoom(a, b, c), [x, y, scale]);
+      await sleep(ms);
+    },
+    // Confirmation pop-up (delete, remove, reset…): optionally types the text it asks for, then confirms.
+    async confirm(text) {
+      const dialog = page.locator('.swal[role="alertdialog"]').last();
+      await dialog.waitFor({ state: 'visible' });
+      await sleep(900);
+      if (text) await h.type(dialog.locator('input'), text, { delay: 90 });
+      await h.click(dialog.locator('button').last());
+    },
+    // The app's result popup (SweetAlert style): lets viewers read it, then clicks OK if it is still open.
+    async ok(timeout = 3000) {
+      const pop = page.locator('.sa').last();
+      if (await pop.waitFor({ state: 'visible', timeout }).then(() => true, () => false)) {
+        await sleep(1200);
+        const btn = page.locator('.sa-ok');
+        if (await btn.isVisible().catch(() => false)) await h.click(btn);
+      }
+    },
+    // Header button, then "Log out" in the confirmation dialog.
+    async logout() {
+      await h.click(page.locator('.side-logout, header button[title="Log out"]').first());
+      await sleep(700);
+      await h.click(page.getByRole('button', { name: 'Log out' }).last());
+      await page.waitForURL('**/login');
+      await h.replaceCursor();
+      await h.ok();
     },
     async replaceCursor() {
       await page.mouse.move(pos.x, pos.y);
@@ -174,41 +284,98 @@ export async function record(name, steps, { setup } = {}) {
   const clips = [];
   for (const s of steps) clips.push(s.say ? await speak(s.say) : null);
 
-  const videoDir = path.join(CACHE, `video-${name}`);
-  fs.rmSync(videoDir, { recursive: true, force: true });
+  const frameDir = path.join(CACHE, `frames-${name}`);
+  fs.rmSync(frameDir, { recursive: true, force: true });
+  fs.mkdirSync(frameDir, { recursive: true });
   const browser = await launch();
-  const context = await browser.newContext({
-    viewport: SIZE,
-    deviceScaleFactor: 1,
-    recordVideo: { dir: videoDir, size: SIZE },
-    acceptDownloads: true,
-    timezoneId: 'Asia/Manila',
-  });
+  const context = await browser.newContext({ viewport: SIZE, deviceScaleFactor: 1, acceptDownloads: true, timezoneId: 'Asia/Manila' });
   await context.addInitScript(CURSOR);
   const page = await context.newPage();
+  const pauses = [];
+  let pausedTotal = 0;
+  const vnow = () => Date.now() - pausedTotal;
+  const h = helpers(page, {
+    async offline(fn) {
+      await cdp.send('Page.stopScreencast').catch(() => {});
+      const at = Date.now();
+      try {
+        return await fn();
+      } finally {
+        const dur = Date.now() - at;
+        pauses.push({ at, dur });
+        pausedTotal += dur;
+        await startCast();
+      }
+    },
+  });
+  await h.showCard('<!doctype html><body style="background:#f4f5f7"></body>');
+
+  // Chrome's screencast stamps each frame with the time it was drawn, so the picture stays in
+  // step with the voice (Playwright's video recorder drifts by seconds under load).
+  const frames = [];
+  let cdp; // set just below; offline() above uses it once recording has started
+  cdp = await context.newCDPSession(page);
+  cdp.on('Page.screencastFrame', ({ data, metadata, sessionId }) => {
+    const file = path.join(frameDir, `${String(frames.length).padStart(6, '0')}.jpg`);
+    fs.writeFileSync(file, Buffer.from(data, 'base64'));
+    frames.push({ file, t: metadata.timestamp * 1000 });
+    cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
+  });
+  const startCast = () => cdp.send('Page.startScreencast', { format: 'jpeg', quality: 88, maxWidth: SIZE.width, maxHeight: SIZE.height }).catch(() => {});
+  page.on('framenavigated', (f) => f === page.mainFrame() && startCast());
+  await startCast();
   const t0 = Date.now();
-  const h = helpers(page);
   if (setup) await setup(h);
 
   const timeline = [];
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
     const clip = clips[i];
-    const start = Date.now();
+    const start = vnow();
     if (clip) timeline.push({ file: clip.file, at: start - t0, dur: clip.duration, text: s.say });
     process.stdout.write(`  ${String(i + 1).padStart(2)}. ${(s.say || '(no voice)').slice(0, 70)}\n`);
     await sleep(s.lead || 0);
-    if (s.act) await s.act(h);
-    await sleep(start + (clip?.duration || 0) + (s.after ?? 450) - Date.now());
+    try {
+      if (s.act) await s.act(h);
+    } catch (e) {
+      const shot = path.join(CACHE, `error-${name}-step${i + 1}.png`);
+      await page.screenshot({ path: shot }).catch(() => {});
+      e.message = `Step ${i + 1} failed (screenshot: ${shot}): ${e.message}`;
+      await browser.close();
+      throw e;
+    }
+    await sleep(start + (clip?.duration || 0) + (s.after ?? 450) - vnow());
   }
   await sleep(600);
-  const total = Date.now() - t0;
-  const video = page.video();
-  await context.close();
+  const total = vnow() - t0;
+  await cdp.send('Page.stopScreencast').catch(() => {});
   await browser.close();
-  const raw = await video.path();
 
-  await mux(name, raw, timeline, total);
+  // Frame times on the video clock: wall time minus any offline pauses before the frame.
+  for (const f of frames) f.t -= pauses.filter((p) => p.at < f.t).reduce((a, p) => a + Math.min(p.dur, f.t - p.at), 0);
+  const video = await framesToVideo(frameDir, frames, t0, total);
+  await mux(name, video, timeline, total);
+  fs.rmSync(frameDir, { recursive: true, force: true });
+}
+
+// Each frame is shown until the next one was drawn (the first from 0, the last until the end).
+async function framesToVideo(dir, frames, t0, total) {
+  frames.sort((a, b) => a.t - b.t);
+  const list = path.join(dir, 'frames.txt');
+  const lines = [];
+  const entry = (f) => `file '${f.file.replace(/\\/g, '/')}'`;
+  frames.forEach((f, i) => {
+    const from = i === 0 ? 0 : f.t - t0;
+    const to = i + 1 < frames.length ? frames[i + 1].t - t0 : total;
+    if (to <= from) return;
+    lines.push(entry(f), `duration ${((to - from) / 1000).toFixed(3)}`);
+  });
+  lines.push(entry(frames[frames.length - 1]));
+  fs.writeFileSync(list, lines.join('\n'));
+  const out = path.join(dir, 'video.mp4');
+  await run(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list,
+    '-vf', 'fps=30,format=yuv420p', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16', out], { maxBuffer: 1 << 24 });
+  return out;
 }
 
 // ---------- audio + captions + mp4 ----------

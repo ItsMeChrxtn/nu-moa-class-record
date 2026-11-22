@@ -14,14 +14,16 @@ const STUDENTS = [
   ['2024-100208', 'HIZON, MARIELLE ANNE DY'],
   ['2024-100209', 'ILAGAN, JOHN CARLO SY'],
   ['2024-100210', 'LACSON, BIANCA ROSE ONG'],
+  ['2024-100211', 'MERCADO, DANIEL JOSE PUA', 'Registered'], // signed up, not yet enrolled: skipped on import
+  ['2024-100213', 'SANTIAGO, RICO JOHN ABAD'], // already has an account from another faculty's class
 ];
 
 export const MASTERLIST = path.join(HERE, '.cache', 'INF243-masterlist.pdf');
 
 export async function makeMasterList() {
   const rows = STUDENTS.map(
-    ([no, name], i) =>
-      `<tr><td>${i + 1}</td><td>${no}</td><td>${name}</td><td>BSIT-MWA-MNL</td><td>${name.split(',')[0].toLowerCase().replace(/\s+/g, '')}@example.com</td><td>Enrolled</td></tr>`
+    ([no, name, status = 'Enrolled'], i) =>
+      `<tr><td>${i + 1}</td><td>${no}</td><td>${name}</td><td>BSIT-MWA-MNL</td><td>${name.split(',')[0].toLowerCase().replace(/\s+/g, '')}@example.com</td><td>${status}</td></tr>`
   );
   const html = `<!doctype html><html><head><style>
     body{font-family:Arial,sans-serif;font-size:11px;margin:36px}

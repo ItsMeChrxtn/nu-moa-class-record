@@ -15,7 +15,6 @@ const ADMIN_TABS = [
 ];
 
 const ayKey = (s) => (s.academicYear || '').trim();
-const ayLabel = (ay) => (ay ? `A.Y. ${ay.replace(/\s*-\s*/, ' - ')}` : 'No academic year');
 export default function Layout() {
   const { user, logout } = useAuth();
   const { confirm, toast } = useUI();
@@ -24,7 +23,6 @@ export default function Layout() {
   const [open, setOpen] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [sections, setSections] = useState([]); // every section of this faculty
-  const [secOpen, setSecOpen] = useState(true); // Sections dropdown in the sidebar
   const ready = user && !user.mustChangePassword;
   const params = new URLSearchParams(location.search);
 
@@ -36,7 +34,6 @@ export default function Layout() {
   // Academic years, newest first, for the Sections dropdown.
   const years = [...new Set(sections.map(ayKey))].sort((a, b) => b.localeCompare(a));
   const openId = location.pathname.match(/^\/faculty\/sections\/([^/]+)/)?.[1];
-  const openAy = openId ? ayKey(sections.find((x) => x.id === openId) || {}) : null;
 
   async function doLogout() {
     const ok = await confirm({ title: 'Log out?', message: 'You will need your password to sign in again.', confirmLabel: 'Log out' });
@@ -57,65 +54,50 @@ export default function Layout() {
   );
 
   let nav = null;
+  let tabs = []; // bottom bar on phones: { to, icon, label, active }
   if (ready && user.role === 'faculty') {
     const view = params.get('view');
+    tabs = [
+      { to: '/faculty', icon: 'layers', label: 'Home', active: onPath('/faculty') && !view },
+      { to: `/faculty?view=sections${years[0] ? `&ay=${encodeURIComponent(years[0])}` : ''}`, icon: 'book', label: 'Sections', active: view === 'sections' || !!openId },
+      { to: '/faculty?view=schedule', icon: 'calendar', label: 'Schedule', active: onPath('/faculty') && view === 'schedule' },
+      { to: '/faculty/profile', icon: 'user', label: 'Profile', active: onPath('/faculty/profile') },
+    ];
     nav = (
       <>
         <span className="side-label">Workspace</span>
-        {item('/faculty', 'layers', 'Dashboard', onPath('/faculty') && !view)}
-        {years.length > 0 && (
-          <div className={`side-group ${secOpen ? 'open' : ''}`}>
-            <button type="button" className={`side-link side-drop ${view === 'sections' || openId ? 'in' : ''}`} onClick={() => setSecOpen((v) => !v)} aria-expanded={secOpen}>
-              <Icon name="book" size={17} />
-              <span>Sections</span>
-              <Icon name="chevronDown" size={15} className="side-caret" />
-            </button>
-            {secOpen && (
-              <div className="side-sub">
-                {years.map((y) => {
-                  const on = (onPath('/faculty') && view === 'sections' && (params.get('ay') || years[0]) === y) || openAy === y;
-                  return (
-                    <Link key={y || 'none'} to={`/faculty?${new URLSearchParams({ view: 'sections', ay: y })}`} className={`side-sublink ${on ? 'on' : ''}`}>
-                      {ayLabel(y)}
-                      <small>{sections.filter((x) => ayKey(x) === y).length}</small>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-        {item('/faculty?view=schedule', 'calendar', 'Weekly schedule', onPath('/faculty') && view === 'schedule')}
+        {item('/faculty', 'layers', 'Home', onPath('/faculty') && !view)}
+        {item(`/faculty?view=sections${years[0] ? `&ay=${encodeURIComponent(years[0])}` : ''}`, 'book', 'Sections', view === 'sections' || !!openId)}
+        {item('/faculty?view=schedule', 'calendar', 'Schedule', onPath('/faculty') && view === 'schedule')}
+        {item('/faculty/profile', 'user', 'Profile', onPath('/faculty/profile'))}
       </>
     );
   } else if (ready && user.role === 'admin') {
     const tab = params.get('tab') || 'dashboard';
+    tabs = ADMIN_TABS.map((t) => ({ to: `/admin?tab=${t.tab}`, icon: t.icon, label: t.label === 'Dashboard' ? 'Home' : t.label, active: onPath('/admin') && tab === t.tab }));
     nav = (
       <>
         <span className="side-label">Administration</span>
-        {ADMIN_TABS.map((t) => item(`/admin?tab=${t.tab}`, t.icon, t.label, onPath('/admin') && tab === t.tab))}
+        {ADMIN_TABS.map((t) => item(`/admin?tab=${t.tab}`, t.icon, t.label === 'Dashboard' ? 'Home' : t.label, onPath('/admin') && tab === t.tab))}
       </>
     );
   } else if (ready && user.role === 'student') {
     nav = (
       <>
         <span className="side-label">Student</span>
-        {item('/records', 'award', 'My grades', onPath('/records'))}
+        {item('/records', 'award', 'Grades', onPath('/records'))}
       </>
     );
   }
 
   return (
-    <div className={`shell ${nav ? 'has-side' : ''}`}>
+    <div className={`shell ${nav ? 'has-side' : ''} ${tabs.length ? 'has-tabbar' : ''}`}>
       {nav && (
         <>
-          <aside className={`side ${open ? 'open' : ''}`}>
-            <Link to="/" className="brand side-brand">
+          <aside className={`side rail ${open ? 'open' : ''}`}>
+            <Link to="/" className="brand side-brand" aria-label="Class Record home">
               <BrandMark />
-              <span className="brand-text">
-                <strong>Class Record</strong>
-                <small>NU MOA</small>
-              </span>
+              <small className="rail-brand">NU MOA</small>
             </Link>
             <nav className="side-nav" aria-label="Main">{nav}</nav>
           </aside>
@@ -155,6 +137,16 @@ export default function Layout() {
         </main>
         <footer className="app-footer">© {new Date().getFullYear()} National University MOA · Class Record</footer>
       </div>
+      {tabs.length > 0 && (
+        <nav className="tabbar" aria-label="Quick navigation">
+          {tabs.map((t) => (
+            <Link key={t.label} to={t.to} className={`tabbar-item ${t.active ? 'on' : ''}`} aria-current={t.active ? 'page' : undefined}>
+              <Icon name={t.icon} size={20} />
+              <span>{t.label}</span>
+            </Link>
+          ))}
+        </nav>
+      )}
     </div>
   );
 }

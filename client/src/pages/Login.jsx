@@ -32,73 +32,81 @@ export default function Login() {
   }
 
   return (
-    <div className="auth-page">
-      <aside className="auth-brand">
-        <span className="brand">
+    <div className="lg">
+      <section className="lg-left">
+        <header className="lg-brand">
           <BrandMark />
-          <span className="brand-text"><strong>Class Record</strong><small>National University MOA</small></span>
-        </span>
-        <div className="auth-brand-body">
-          <h2>Grades, attendance and class records in one place.</h2>
-          <ul>
-            <li><Icon name="chart" size={16} /> Faculty encode scores and publish grades per term</li>
-            <li><Icon name="calendar" size={16} /> Attendance and weekly schedules for every section</li>
-            <li><Icon name="award" size={16} /> Students see each score behind their grade</li>
-          </ul>
-        </div>
-        <small className="auth-brand-foot">© {new Date().getFullYear()} National University MOA</small>
-      </aside>
-      <div className="auth-panel">
-      <main className="auth-hero">
-        <p className="eyebrow">Welcome</p>
-        <h1>Sign in to your account</h1>
-        <p className="hero-text">Sign in with your email address and password.</p>
+          <span>
+            <strong>Class Record</strong>
+            <small>National University · Mall of Asia</small>
+          </span>
+        </header>
 
-        <form className="auth-form" onSubmit={submit}>
-          <label className="field">
-            <span>Email</span>
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              type="text"
-              inputMode="email"
-              placeholder="Your email address"
-              autoComplete="username"
-              autoCapitalize="none"
-              spellCheck={false}
-              autoFocus
-              required
-            />
-          </label>
-          <label className="field">
-            <span>Password</span>
-            <span className="input-icon">
-              <Icon name="lock" />
+        <main className="lg-main">
+          <h1>Welcome back</h1>
+          <p className="lg-lead">Sign in with your school email to see your classes, grades and attendance.</p>
+
+          <form className="lg-form" onSubmit={submit} noValidate>
+            <label className="lg-field">
+              <span>Email address</span>
               <input
-                type={show ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Your password"
-                autoComplete="current-password"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                type="text"
+                inputMode="email"
+                placeholder="Your email address"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                autoFocus
                 required
               />
-              <button type="button" className="icon-btn reveal" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>
-                <Icon name={show ? 'eyeOff' : 'eye'} size={17} />
-              </button>
-            </span>
-          </label>
-          {error && <div className="alert error"><Icon name="alert" />{error}</div>}
-          <button className="btn primary block" disabled={busy || !username || !password}>
-            {busy ? <span className="spinner" style={{ borderColor: '#fff6', borderTopColor: '#fff' }} /> : 'Log in'}
-          </button>
-          <p className="auth-note">
-            <Link to="/forgot-password">Forgot your password?</Link>
-          </p>
-        </form>
-      </main>
+            </label>
+            <div className="lg-field lg-field-pass">
+            <label className="lg-field">
+              <span>Password</span>
+              <span className="lg-pass">
+                <input
+                  type={show ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  required
+                />
+                <button type="button" className="lg-reveal" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>
+                  <Icon name={show ? 'eyeOff' : 'eye'} size={18} />
+                </button>
+              </span>
+            </label>
+            <Link to="/forgot-password" className="lg-forgot">Forgot password?</Link>
+            </div>
+            {error && <div className="lg-error" role="alert"><Icon name="alert" size={16} />{error}</div>}
+            <button className="lg-submit" disabled={busy || !username || !password}>
+              {busy ? <span className="spinner" style={{ borderColor: '#fff6', borderTopColor: '#fff' }} /> : 'Sign in'}
+            </button>
+          </form>
 
-      <footer className="auth-foot">If a score looks off, message your instructor.</footer>
-      </div>
+          <p className="lg-help">Students: your account is set up by your instructor. If you can&apos;t sign in, ask them to resend your details.</p>
+        </main>
+
+        <footer className="lg-foot">© {new Date().getFullYear()} National University MOA</footer>
+      </section>
+
+      <aside className="lg-right" aria-hidden="true">
+        <div className="lg-photo">
+          <span className="lg-pill">NU MOA · Class Record</span>
+          <div className="lg-caption">
+            <h2>Every grade, every class day, <em>in one place.</em></h2>
+            <p>Faculty encode scores and attendance. Students see each score behind their grade.</p>
+            <dl className="lg-facts">
+              <div><dt>Grades</dt><dd>Midterm and final, per term</dd></div>
+              <div><dt>Attendance</dt><dd>Check-in codes in class</dd></div>
+              <div><dt>Certificates</dt><dd>Downloaded by students</dd></div>
+            </dl>
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }

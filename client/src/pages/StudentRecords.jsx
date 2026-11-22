@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, COMPONENTS, gradeBreakdown, roomLabel, schedule, termOf, track } from '../api.js';
 import { useAuth } from '../auth.jsx';
-import { EmptyState, ErrorState, Icon, PageLoader, Ring, Stat, WelcomeBanner, displayName, eqTone, firstName, titleCase, useUI } from '../ui.jsx';
+import { EmptyState, ErrorState, Icon, PageLoader, Ring, displayName, eqTone, firstName, titleCase, useUI } from '../ui.jsx';
+import { Bento, HeroTile, MiniStat } from '../Bento.jsx';
 import { BarRows, ChartCard, ChartEmpty, Donut } from '../Charts.jsx';
 import { downloadCertificate } from '../certificate.js';
 
@@ -32,7 +33,7 @@ function CheckinBox({ onDone }) {
   }
 
   return (
-    <form className="card checkin-box" onSubmit={submit}>
+    <form className="checkin-box" onSubmit={submit}>
       <span className="checkin-icon"><Icon name="clock" size={20} /></span>
       <div className="checkin-text">
         <strong>Check in to class</strong>
@@ -95,33 +96,31 @@ export default function StudentRecords() {
 
   return (
     <div className="container dash">
-      <WelcomeBanner
-        eyebrow={`Student · ${user.username}`}
-        title={<>Hello, <span className="accent">{firstName(user.name)}</span></>}
-        facts={records.length ? [{ label: 'Classes', value: records.length }, { label: 'Average', value: avg == null ? '—' : `${avg.toFixed(1)}%` }, { label: 'Attendance', value: attAll ? `${Math.round(((att.P + att.L) / attAll) * 100)}%` : '—' }] : []}
-        lead={records.length ? `${records.length} class${records.length === 1 ? '' : 'es'} with your scores` : 'Your grades will appear here once your faculty publishes them.'}
-      />
-      <CheckinBox onDone={() => api('/me/records').then((d) => setRecords(d.records)).catch(() => {})} />
-      {records.length > 0 && (
-        <>
-          <div className="kpi-row">
-            <Stat tone="blue" icon="book" label="Classes" value={records.length} sub="from your instructors" />
-            <Stat tone="gold" icon="chart" label="Average" value={avg == null ? <span className="stat-none">Not released yet</span> : <>{avg.toFixed(1)}<small>%</small></>} sub="released grades only" />
-            <Stat tone="blue" icon="check" label="Attendance" value={<>{attAll ? Math.round(((att.P + att.L) / attAll) * 100) : '—'}<small>%</small></>} sub={`${att.A} absent · ${att.L} late`} />
-            <Stat tone="gold" icon="award" label="Certificates" value={certs} sub="ready to download" />
-          </div>
-          <div className="dash-grid student-grid">
-            <ChartCard className="dash-wide" title="My grades" sub="Latest grade per class, percent">
+      <Bento layout={records.length ? 'student' : 'solo'}>
+        <HeroTile
+          meta={`Student · ${user.username}`}
+          title={<>Hello, <span className="accent">{firstName(user.name)}</span></>}
+          lead={records.length ? `${records.length} class${records.length === 1 ? '' : 'es'} with your scores` : 'Your grades will appear here once your faculty publishes them.'}
+        >
+          <CheckinBox onDone={() => api('/me/records').then((d) => setRecords(d.records)).catch(() => {})} />
+        </HeroTile>
+        {records.length > 0 && (
+          <>
+            <MiniStat area="s1" tone="blue" icon="book" label="Classes" value={records.length} sub="from your instructors" />
+            <MiniStat area="s2" tone="gold" icon="chart" label="Average" value={avg == null ? '—' : <>{avg.toFixed(1)}<small>%</small></>} meter={avg ?? undefined} sub="released grades only" />
+            <MiniStat area="s3" tone="green" icon="check" label="Attendance" value={attAll ? <>{Math.round(((att.P + att.L) / attAll) * 100)}<small>%</small></> : '—'} meter={attAll ? ((att.P + att.L) / attAll) * 100 : undefined} sub={`${att.A} absent · ${att.L} late`} />
+            <MiniStat area="s4" tone="rose" icon="award" label="Certificates" value={certs} sub="ready to download" />
+            <ChartCard className="ga-trend" title="My grades" sub="Latest grade per class, percent">
               <BarRows series={['Grade']} threshold={60} thresholdLabel="Passing" rows={latest.map((x) => ({ label: x.r.section.code, sub: x.g.hidden ? `${titleCase(x.r.section.subjectTitle || '')} · grade not released yet` : `${titleCase(x.r.section.subjectTitle || '')} · ${x.finals ? 'Final' : 'Midterm'} · GP ${x.g.equivalent ?? '—'}`, values: [x.g.percent] }))} />
             </ChartCard>
-            <ChartCard title="Attendance" sub="All classes">
+            <ChartCard className="ga-att" title="Attendance" sub="All classes">
               {att.P + att.L + att.A + att.E ? (
                 <Donut parts={[{ label: 'Present', value: att.P, color: 'var(--c1)' }, { label: 'Late', value: att.L, color: 'var(--c2)' }, { label: 'Absent', value: att.A, color: 'var(--red)' }, { label: 'Excused', value: att.E, color: 'var(--c3)' }]} center={att.P + att.L + att.A + att.E} centerLabel="sessions" size={130} />
               ) : <ChartEmpty>No attendance yet.</ChartEmpty>}
             </ChartCard>
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </Bento>
       <div>
         {records.length === 0 ? (
           <EmptyState icon="book" title="No published records yet">

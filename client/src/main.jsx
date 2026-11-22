@@ -13,6 +13,13 @@ import SectionRecord from './pages/SectionRecord.jsx';
 import StudentRecords from './pages/StudentRecords.jsx';
 import { PageLoader, UIProvider } from './ui.jsx';
 import './styles.css';
+import './theme-pro.css';
+import './theme-campus.css';
+import './theme-clean.css';
+import './theme-school.css';
+import './bento.css';
+import './login.css';
+import './elegant.css';
 
 function Guard({ role, children }) {
   const { user } = useAuth();

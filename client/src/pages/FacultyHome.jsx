@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ChartCard, ChartEmpty, Columns, Donut, Line, RankList } from '../Charts.jsx';
-import { api, meetingsOn, roomLabel, schedule, to12, todayCode } from '../api.js';
+import { api, meetingsOn, roomLabel, schedule, todayCode } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { NewSectionModal, deleteSection } from '../Roster.jsx';
 import Timetable, { LoadingReportModal, sectionColors } from '../Timetable.jsx';
-import { DownloadButton, EmptyState, ErrorState, Icon, PageLoader, Stat, WelcomeBanner, firstName, greeting, titleCase, useUI } from '../ui.jsx';
+import { DownloadButton, EmptyState, ErrorState, Icon, PageLoader, firstName, greeting, titleCase, useUI } from '../ui.jsx';
+import { Bento, HeroTile, MiniStat, NextClass, Tile, WeekTile } from '../Bento.jsx';
 
 const TERM_ORDER = ['first', 'second', 'third', 'summer'];
 const termRank = (t) => {
@@ -101,78 +102,34 @@ function AtRiskPanel({ sections, colors }) {
   );
 }
 
-function TodayPanel({ sections, colors, onOpenWeek }) {
-  const day = todayCode();
-  const now = new Date();
-  const mins = now.getHours() * 60 + now.getMinutes();
-  const toMin = (t) => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null);
-  const classes = sections
-    .flatMap((s) => meetingsOn(s, day).map((m) => ({ ...m, s })))
-    .sort((a, b) => (a.start || '99').localeCompare(b.start || '99'));
-  const nextIdx = classes.findIndex((c) => toMin(c.end) == null || toMin(c.end) > mins);
-  const left = classes.filter((c) => toMin(c.end) == null || toMin(c.end) > mins).length;
-  const hm = (t) => (t ? to12(t).replace(' ', ' ') : '');
-  const days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
+// Every section this term as a compact row: code, subject, students, current average.
+function ClassesTile({ sections, colors, onNew }) {
   return (
-    <section className="today2 card">
-      <header className="t2-head">
-        <div className="t2-date">
-          <span className="t2-dow">{now.toLocaleDateString(undefined, { weekday: 'short' })}</span>
-          <span className="t2-day">{now.getDate()}</span>
-        </div>
-        <div className="t2-title">
-          <span className="t2-kicker">Today&apos;s classes</span>
-          <h2>{classes.length ? `${classes.length} class${classes.length === 1 ? '' : 'es'}` : 'No classes today'}</h2>
-          <span className="t2-sub">{classes.length ? (left ? `${left} still to go` : 'All done for the day') : 'Enjoy the free day'}</span>
-        </div>
-        <button type="button" className="btn t2-week" onClick={onOpenWeek}>
-          <Icon name="calendar" size={15} /> <span>Full week</span>
-        </button>
-      </header>
-
-      {classes.length > 0 && (
-        <ol className="t2-list">
-          {classes.map((c, i) => {
-            const st = toMin(c.start);
-            const en = toMin(c.end);
-            const live = st != null && st <= mins && mins < en;
-            const done = en != null && en <= mins;
-            const state = live ? 'now' : done ? 'done' : i === nextIdx ? 'next' : 'later';
-            const progress = live ? Math.round(((mins - st) / (en - st)) * 100) : done ? 100 : 0;
-            return (
-              <li key={`${c.s.id}-${i}`} className={`t2-item is-${state} sc-${colors.get(c.s.id) ?? 0}`}>
-                <Link to={`/faculty/sections/${c.s.id}`} className="t2-card">
-                  <span className="t2-time">
-                    <b>{hm(c.start) || '—'}</b>
-                    <small>to {hm(c.end) || '—'}</small>
-                  </span>
-                  <span className="t2-main">
-                    <strong>{c.s.code}</strong>
-                    <span>{titleCase(c.s.subjectTitle || c.s.subjectCode || '')}</span>
-                  </span>
-                  {c.room ? <span className="t2-room">{roomLabel(c.room)}</span> : <span />}
-                  <span className={`t2-tag tag-${state}`}>{{ now: 'In class now', done: 'Done', next: 'Up next', later: 'Later' }[state]}</span>
-                  {(live || done) && <span className="t2-prog"><i style={{ width: `${progress}%` }} /></span>}
-                </Link>
-              </li>
-            );
-          })}
-        </ol>
-      )}
-
-      <div className="t2-week-strip" aria-label="Classes per day this week">
-        {days.map((d) => {
-          const n = sections.reduce((a, s) => a + meetingsOn(s, d).length, 0);
+    <Tile area="classes" className="classes-tile" title="My classes" sub={`${sections.length} section${sections.length === 1 ? '' : 's'} this term`} action={<button type="button" className="tile-link" onClick={onNew}><Icon name="plus" size={14} /> New</button>}>
+      <ul className="class-rows">
+        {sections.map((s) => {
+          const avg = currentAvg(s);
           return (
-            <button key={d} type="button" className={`t2-day-pill ${d === day ? 'is-today' : ''}`} onClick={onOpenWeek} title={`${n} class${n === 1 ? '' : 'es'} on ${d}`}>
-              <span>{d.slice(0, 1) + d.slice(1).toLowerCase()}</span>
-              <span className="t2-dots">{n ? Array.from({ length: Math.min(n, 4) }, (_, k) => <i key={k} />) : <em>free</em>}</span>
-            </button>
+            <li key={s.id}>
+              <Link to={`/faculty/sections/${s.id}`} className={`class-row sc-${colors.get(s.id) ?? 0}`}>
+                <span className="cr-code">{s.code.replace(/^[A-Z]+/, '') || s.code}</span>
+                <span className="cr-main">
+                  <strong>{s.code}</strong>
+                  <small>{titleCase(s.subjectTitle || s.subjectCode || '')}</small>
+                </span>
+                <span className="cr-meta"><Icon name="users" size={13} /> {s.studentCount}</span>
+                <span className="cr-avg">
+                  <b>{avg == null ? '—' : `${avg.toFixed(1)}%`}</b>
+                  <i><em style={{ width: `${Math.min(100, avg || 0)}%` }} /></i>
+                </span>
+                <span className={`cr-pub ${s.published ? 'on' : ''}`} title={s.published ? 'Visible to students' : 'Hidden from students'}><Icon name={s.published ? 'eye' : 'eyeOff'} size={14} /></span>
+              </Link>
+            </li>
           );
         })}
-      </div>
-    </section>
+      </ul>
+    </Tile>
   );
 }
 
@@ -183,7 +140,7 @@ const isFail = (eq) => eq === 'R' || eq === 'Repeat' || eq === 'F' || eq === 'Fa
 const currentAvg = (s) => (s.finalsItemCount || s.gradingMode === 'final' ? s.finalAverage : s.midtermAverage);
 const pct = (v) => (v == null ? '—' : `${v.toFixed(1)}%`);
 // Shades of blue for the grade donut (best = darkest), gold for failing.
-const DONUT_BLUES = ['#2f54eb', '#4f7cff', '#6f95ff', '#8fb0ff', '#adc5ff', '#c9d8ff', '#dfe8ff'];
+const DONUT_BLUES = ['#1f2a72', '#27348b', '#4352a8', '#6573bd', '#8995cf', '#aeb6df', '#d0d5ec']; // NU blue, darkest = best grade
 
 // One term on a section card: class average (bar) and item count.
 function TermMeter({ label, items, average, state }) {
@@ -324,17 +281,17 @@ function DashCharts({ sections }) {
     .map((s) => ({ key: s.id, code: s.code.slice(-3), title: s.code, sub: `${titleCase(s.subjectTitle || s.subjectCode || '')} · ${s.studentCount} students`, value: currentAvg(s), label: pct(currentAvg(s)) }));
 
   return (
-    <div className="dash-grid">
-      <ChartCard className="dash-wide" title="Attendance trend" sub="Present or late, all sections, by class day">
+    <>
+      <ChartCard className="ga-trend" title="Attendance trend" sub="Present or late, all sections, by class day">
         {trend.length > 6 ? <Line points={trend} height={210} /> : trend.length ? <Columns data={trend.map((p) => ({ ...p, value: p.value ?? 0 }))} height={190} unit="%" /> : <ChartEmpty icon={<Icon name="calendar" size={22} />} title="No attendance yet" action={<Link className="btn" to="/faculty?view=sections">Open a section</Link>}>Take attendance in a section and the rate per class day shows here.</ChartEmpty>}
       </ChartCard>
-      <ChartCard title="Grade distribution" sub={graded ? `${graded} students this term` : 'This term'}>
+      <ChartCard className="ga-grades" title="Grade distribution" sub={graded ? `${graded} students this term` : 'This term'}>
         {graded ? <Donut parts={parts} center={graded} centerLabel="students" /> : <ChartEmpty icon={<Icon name="award" size={22} />} title="No grades yet">The spread of grades appears once scores are encoded.</ChartEmpty>}
       </ChartCard>
-      <ChartCard title="Top sections" sub="By class average">
+      <ChartCard className="ga-top" title="Top sections" sub="By class average">
         {ranked.length ? <RankList items={ranked} /> : <ChartEmpty icon={<Icon name="chart" size={22} />} title="No rankings yet">Sections are ranked by class average once they have scores.</ChartEmpty>}
       </ChartCard>
-    </div>
+    </>
   );
 }
 
@@ -440,36 +397,36 @@ export default function FacultyHome() {
         </>
       ) : (
         <>
-          <WelcomeBanner
-            eyebrow={latest ? latest.label : 'Faculty'}
-            title={<>{greeting()}, <span className="accent">{firstName(user.name)}</span></>}
-            lead={todayLine(current)}
-            actions={newButton}
-            facts={sections.length ? [{ label: 'Sections', value: current.length }, { label: 'Students', value: students }, { label: 'Average', value: termAverage == null ? '—' : `${termAverage.toFixed(1)}%` }] : []}
-          />
-
           {sections.length === 0 ? (
-            <EmptyState title="No sections yet">
-              Create a section and import its class list from a PDF.
-              <br />
-              <button className="btn primary" style={{ marginTop: 14 }} onClick={() => setCreating(true)}>
-                <Icon name="plus" size={16} /> New Section
-              </button>
-            </EmptyState>
-          ) : (
             <>
-              <div className="kpi-row">
-                <Stat tone="blue" icon="layers" label="Sections" value={current.length} meter={current.length ? (published / current.length) * 100 : 0} sub={published ? `${published} of ${current.length} visible to students` : 'None visible to students yet'} />
-                <Stat tone="gold" icon="users" label="Students" value={students} sub={`about ${current.length ? Math.round(students / current.length) : 0} per section`} />
-                <Stat tone="blue" icon="chart" label="Class average" value={termAverage == null ? <span className="stat-none">No scores yet</span> : <>{termAverage.toFixed(1)}<small>%</small></>} meter={termAverage ?? undefined} sub={avgs.length ? `${avgs.length} of ${current.length} sections with scores` : 'Add items in a section to start'} />
-                <Stat tone="gold" icon="check" label="Attendance" value={att.all ? <>{Math.round((att.ok / att.all) * 1000) / 10}<small>%</small></> : <span className="stat-none">Not taken yet</span>} meter={att.all ? (att.ok / att.all) * 100 : undefined} sub={att.all ? `${att.all - att.ok} absence${att.all - att.ok === 1 ? '' : 's'} recorded` : 'Take attendance in a section'} />
-              </div>
-
-              <DashCharts sections={current} />
-
-              <AtRiskPanel sections={current} colors={colors} />
-              <TodayPanel sections={current} colors={colors} onOpenWeek={() => pick('schedule')} />
+              <Bento layout="solo">
+                <HeroTile meta="Faculty" title={<>{greeting()}, <span className="accent">{firstName(user.name)}</span></>} lead="Create your first section to get started." actions={newButton} />
+              </Bento>
+              <EmptyState title="No sections yet">
+                Create a section and import its class list from a PDF.
+              </EmptyState>
             </>
+          ) : (
+            <Bento layout="faculty">
+              <HeroTile
+                meta={latest?.label}
+                title={<>{greeting()}, <span className="accent">{firstName(user.name)}</span></>}
+                lead={todayLine(current)}
+                actions={newButton}
+              >
+                <NextClass sections={current} />
+              </HeroTile>
+              <MiniStat area="s1" tone="blue" icon="layers" label="Sections" value={current.length} meter={current.length ? (published / current.length) * 100 : 0} sub={published ? `${published} of ${current.length} visible` : 'None visible yet'} />
+              <MiniStat area="s2" tone="gold" icon="users" label="Students" value={students} sub={`about ${current.length ? Math.round(students / current.length) : 0} per section`} />
+              <MiniStat area="s3" tone="green" icon="chart" label="Class average" value={termAverage == null ? '—' : <>{termAverage.toFixed(1)}<small>%</small></>} meter={termAverage ?? undefined} sub={avgs.length ? `${avgs.length} of ${current.length} with scores` : 'No scores yet'} />
+              <MiniStat area="s4" tone="rose" icon="check" label="Attendance" value={att.all ? <>{Math.round((att.ok / att.all) * 1000) / 10}<small>%</small></> : '—'} meter={att.all ? (att.ok / att.all) * 100 : undefined} sub={att.all ? `${att.all - att.ok} absence${att.all - att.ok === 1 ? '' : 's'}` : 'Not taken yet'} />
+              <ClassesTile sections={current} colors={colors} onNew={() => setCreating(true)} />
+              <WeekTile sections={current} colors={colors} onOpen={() => pick('schedule')} />
+              <DashCharts sections={current} />
+              <div className="tile-plain" style={{ gridArea: 'risk' }}>
+                <AtRiskPanel sections={current} colors={colors} />
+              </div>
+            </Bento>
           )}
         </>
       )}

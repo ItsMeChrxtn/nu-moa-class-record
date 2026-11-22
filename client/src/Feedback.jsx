@@ -1,9 +1,7 @@
-// Feedback that stays out of the way: a thin progress line while something saves, small
-// notifications in the corner for results, and a proper dialog only when a decision is needed.
-import { useEffect } from 'react';
+// Loading feedback: the page loader and a thin progress line while something saves.
+// Results and confirmations are SweetAlert2 popups (see swal.js).
 import { BrandMark } from './ui.jsx';
 
-const TONE_TITLE = { success: 'Saved', error: 'Something went wrong', info: 'Notice', warning: 'Are you sure?', question: 'Continue?' };
 const TONE_ICON = {
   success: <path d="M20 6 9 17l-5-5" />,
   error: <path d="M18 6 6 18M6 6l12 12" />,
@@ -19,21 +17,6 @@ export function ToneIcon({ type }) {
         {TONE_ICON[type] || TONE_ICON.info}
       </svg>
     </span>
-  );
-}
-
-// The dialog frame used by confirmations (delete, log out, …).
-export function SwalCard({ type, title, children, onClose, label }) {
-  return (
-    <div className="swal-backdrop" onClick={onClose}>
-      <div className={`swal swal-${type}`} role="alertdialog" aria-modal="true" aria-label={label || title} onClick={(e) => e.stopPropagation()}>
-        <div className="swal-head">
-          <ToneIcon type={type} />
-          <h2>{title}</h2>
-        </div>
-        {children}
-      </div>
-    </div>
   );
 }
 
@@ -61,74 +44,5 @@ export function ProgressOverlay({ progress }) {
         {progress.label}
       </div>
     </>
-  );
-}
-
-// One notification. alert: { id, type: 'success' | 'error' | 'info', title, message, duration }
-function Note({ alert, onClose }) {
-  useEffect(() => {
-    const t = setTimeout(() => onClose(alert.id), alert.duration);
-    return () => clearTimeout(t);
-  }, [alert, onClose]);
-  const title = alert.title || TONE_TITLE[alert.type];
-  return (
-    <div className={`note note-${alert.type}`} role={alert.type === 'error' ? 'alert' : 'status'}>
-      <ToneIcon type={alert.type} />
-      <div className="note-text">
-        <strong>{title}</strong>
-        {alert.message && alert.message !== title && <p>{alert.message}</p>}
-      </div>
-      <button type="button" className="note-x" onClick={() => onClose(alert.id)} aria-label="Dismiss">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-      </button>
-      <span className="note-timer" style={{ animationDuration: `${alert.duration}ms` }} />
-    </div>
-  );
-}
-
-export function Notes({ alerts, onClose }) {
-  if (!alerts.length) return null;
-  return (
-    <div className="notes" aria-live="polite">
-      {alerts.slice(-4).map((a) => <Note key={a.id} alert={a} onClose={onClose} />)}
-    </div>
-  );
-}
-
-// SweetAlert-style result popup in the middle of the screen: an animated icon, a title, the
-// message and an OK button. Success closes itself after a moment (with a timer bar); errors wait for OK.
-// alert: { id, type: 'success' | 'error' | 'info' | 'warning', title, message, duration }
-export function SweetAlert({ alert, onClose, count = 1 }) {
-  useEffect(() => {
-    if (alert.type !== 'success' && alert.type !== 'info') return;
-    const t = setTimeout(() => onClose(alert.id), alert.duration);
-    return () => clearTimeout(t);
-  }, [alert, onClose]);
-  useEffect(() => {
-    const key = (e) => (e.key === 'Escape' || e.key === 'Enter') && onClose(alert.id);
-    window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
-  }, [alert, onClose]);
-  const title = alert.title || { success: 'Done!', error: 'Something went wrong', info: 'Heads up', warning: 'Please check' }[alert.type] || 'Notice';
-  const msg = alert.message && alert.message !== title ? alert.message : null;
-  return (
-    <div className="sa-backdrop" onMouseDown={() => onClose(alert.id)}>
-      <div className={`sa sa-${alert.type}`} role={alert.type === 'error' ? 'alertdialog' : 'status'} aria-live="assertive" onMouseDown={(e) => e.stopPropagation()}>
-        <div className={`sa-icon sa-icon-${alert.type}`} aria-hidden="true">
-          <svg viewBox="0 0 80 80">
-            <circle className="sa-ring" cx="40" cy="40" r="36" />
-            {alert.type === 'success' && <path className="sa-mark" d="M24 41 L35 52 L57 29" />}
-            {alert.type === 'error' && <path className="sa-mark" d="M28 28 L52 52 M52 28 L28 52" />}
-            {(alert.type === 'info' || alert.type === 'warning') && <path className="sa-mark" d={alert.type === 'info' ? 'M40 36 L40 56 M40 25 L40 26' : 'M40 22 L40 46 M40 56 L40 57'} />}
-          </svg>
-        </div>
-        <h2>{title}</h2>
-        {msg && <p>{msg}</p>}
-        <button type="button" className="btn primary sa-ok" onClick={() => onClose(alert.id)} autoFocus>
-          OK{count > 1 ? ` (${count - 1} more)` : ''}
-        </button>
-        {(alert.type === 'success' || alert.type === 'info') && <span className="sa-timer" style={{ animationDuration: `${alert.duration}ms` }} />}
-      </div>
-    </div>
   );
 }
